@@ -6,6 +6,6 @@ generate:
   chi-server: true
   client: true
   strict-server: true
-output: database.gen.go
+output: controller.gen.go
 output-options:
   nullable-type: true
