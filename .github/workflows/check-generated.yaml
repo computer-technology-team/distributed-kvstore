@@ -1,9 +1,5 @@
 name: "Check Generated"
-on:
-  push:
-    branches:
-      - "*"
-  pull_request:
+on: push
 permissions:
   contents: read
 jobs:
