@@ -1,27 +1,35 @@
 package cmd
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
-)
 
-const configFileFlag = "config"
+	"github.com/computer-technology-team/distributed-kvstore/cmd/flags"
+	"github.com/computer-technology-team/distributed-kvstore/config"
+)
 
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dist-kv",
 		Short: "Run and Manage Distributed KV Store",
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			configFile, _ := cmd.Flags().GetString(flags.ConfigFileFlag)
+			cfg, err := config.LoadConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
 			logHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-				Level: slog.LevelInfo,
+				Level: cfg.LogLevel,
 			})
 			slog.SetDefault(slog.New(logHandler))
+			slog.Info("Configuration loaded successfully")
+			return nil
 		},
 	}
-
-	cmd.PersistentFlags().String(configFileFlag, "", "config file name")
 
 	RegisterCommandRecursive(cmd)
 
@@ -29,7 +37,12 @@ func NewRootCmd() *cobra.Command {
 }
 
 func RegisterCommandRecursive(parent *cobra.Command) {
-	parent.AddCommand()
+	versionCmd := NewVersionCmd()
+	toolsCmd := NewToolsCmd()
+
+	serveNodeCmd := NewServeNodeCmd()
+
+	parent.AddCommand(versionCmd, toolsCmd, serveNodeCmd)
 }
 
 func Execute() {

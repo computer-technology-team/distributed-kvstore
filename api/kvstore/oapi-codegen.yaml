@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+package: kvstore
+generate:
+  # NOTE another server must be added!
+  models: true
+  chi-server: true
+  client: true
+  strict-server: true
+output: kvstore.gen.go
+output-options:
+  nullable-type: true
