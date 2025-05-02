@@ -1,6 +1,7 @@
 BINARY_NAME=kvstore
 GO_FILES=main.go
 
+# Get version from git tag if available, otherwise use commit hash
 VERSION=$(shell git describe --tags 2>/dev/null || git rev-parse --short HEAD)
 
 .PHONY: build clean generate
