@@ -42,7 +42,9 @@ func RegisterCommandRecursive(parent *cobra.Command) {
 
 	serveNodeCmd := NewServeNodeCmd()
 
-	parent.AddCommand(versionCmd, toolsCmd, serveNodeCmd)
+	serveLBCmd := NewServeLBCmd()
+
+	parent.AddCommand(versionCmd, toolsCmd, serveNodeCmd, serveLBCmd)
 }
 
 func Execute() {

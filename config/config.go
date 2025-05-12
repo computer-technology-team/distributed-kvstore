@@ -14,6 +14,8 @@ type Config struct {
 		Host string `mapstructure:"host"`
 		Port int    `mapstructure:"port"`
 	} `mapstructure:"server"`
+
+	Replicas []string `mapstructure:"replicas"`
 }
 
 // DefaultConfig returns a Config with default values
@@ -27,6 +29,7 @@ func DefaultConfig() *Config {
 			Host: "localhost",
 			Port: 8080,
 		},
+		Replicas: []string{},
 	}
 }
 
@@ -39,6 +42,8 @@ func LoadConfig(configFile string) (*Config, error) {
 	v.SetDefault("log_level", config.LogLevel)
 	v.SetDefault("server.host", config.Server.Host)
 	v.SetDefault("server.port", config.Server.Port)
+
+	v.SetDefault("replicas", config.Replicas)
 
 	v.SetEnvPrefix("DIST_KV")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
