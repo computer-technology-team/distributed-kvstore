@@ -1,0 +1,61 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Load Balancer API
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /kv/{key}:
+    get:
+      summary: Get a value
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Value found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValueResponse"
+    put:
+      summary: Set a value
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetValueRequest"
+      responses:
+        "200":
+          description: OK
+
+components:
+  schemas:
+    SetValueRequest:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+          example: hello world
+    ValueResponse:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+          example: hello world

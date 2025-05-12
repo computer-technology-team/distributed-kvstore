@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+package: loadbalancer
+generate:
+  models: true
+  chi-server: true
+  client: true
+  strict-server: true
+output: api/loadbalancer/loadbalancer.gen.go
+output-options:
+  nullable-type: true
