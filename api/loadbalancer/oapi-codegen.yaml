@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/HEAD/configuration-schema.json
+package: loadbalancer
+generate:
+  # NOTE another server must be added!
+  models: true
+  chi-server: true
+  client: true
+  strict-server: true
+output: loadbalancer.gen.go
+output-options:
+  nullable-type: true
+  skip-prune: true
+import-mapping:
+  # for a given file/URL that is $ref'd, point `oapi-codegen` to the Go package that this spec is generated into, to perform Go package imports
+  ../common/api.yaml: github.com/computer-technology-team/distributed-kvstore/api/common

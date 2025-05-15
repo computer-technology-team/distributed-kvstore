@@ -1,0 +1,57 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Minimal ping API server
+components:
+  schemas:
+    State:
+      type: object
+      required:
+        - partitions
+      properties:
+        partitions:
+          type: array
+          description: Array of partitions in the distributed key-value store
+          items:
+            $ref: "#/components/schemas/Partition"
+    Partition:
+      type: object
+      required:
+        - id
+        - replicas
+        - masterReplicaId
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the partition
+          example: "partition-1"
+        replicas:
+          type: array
+          description: List of replicas for this partition
+          items:
+            $ref: "#/components/schemas/Replica"
+        masterReplicaId:
+          type: string
+          description: >-
+            ID of the replica that is currently the master for this partition
+          example: "replica-1"
+    Replica:
+      type: object
+      required:
+        - id
+        - address
+        - status
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the replica
+          example: "replica-1"
+        address:
+          type: string
+          description: Network address of the replica
+          example: "192.168.1.10:8080"
+        status:
+          type: string
+          description: Current status of the replica
+          enum: [healthy, unhealthy, syncing]
+          example: "healthy"
