@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 
+	"github.com/computer-technology-team/distributed-kvstore/config"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,12 @@ func NewGetCmd() *cobra.Command {
 			ctx := cmd.Context()
 			key := args[0]
 
-			client, err := createClient()
+			cfg, err := config.LoadConfig(cmd)
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			client, err := createClient(cfg.Client.ServerURL)
 			if err != nil {
 				return err
 			}

@@ -1,4 +1,4 @@
-package leader
+package kvstore
 
 import (
 	"sync"
@@ -15,14 +15,12 @@ func NewKVStore() *KVStore {
 	}
 }
 
-// Create or Update a key-value pair
 func (kv *KVStore) Set(key, value string) {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
 	kv.store[key] = value
 }
 
-// Read a value by key
 func (kv *KVStore) Get(key string) (string, bool) {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()
@@ -30,7 +28,6 @@ func (kv *KVStore) Get(key string) (string, bool) {
 	return value, exists
 }
 
-// Delete a key-value pair
 func (kv *KVStore) Delete(key string) bool {
 	kv.mu.Lock()
 	defer kv.mu.Unlock()
@@ -41,7 +38,6 @@ func (kv *KVStore) Delete(key string) bool {
 	return false
 }
 
-// Check if a key exists
 func (kv *KVStore) Exists(key string) bool {
 	kv.mu.RLock()
 	defer kv.mu.RUnlock()

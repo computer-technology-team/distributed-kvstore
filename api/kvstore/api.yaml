@@ -1,17 +1,124 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Minimal ping API server
+  title: KVStore API
+  description: API for a distributed key-value store
 paths:
   /ping:
     get:
+      operationId: pingServer
+      summary: Health check endpoint
       responses:
         "200":
           description: ping response
+          x-go-name: Success
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Pong"
+        default:
+          description: Unexpected error
+          x-go-name: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /kv/{key}:
+    get:
+      operationId: getValue
+      summary: Get a value by key
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Key to retrieve
+      responses:
+        "200":
+          description: Value retrieved successfully
+          x-go-name: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyValueResponse"
+        "404":
+          description: Key not found
+          x-go-name: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          x-go-name: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: setValue
+      summary: Set a key-value pair
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Key to set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetRequest"
+      responses:
+        "200":
+          description: Value set successfully
+          x-go-name: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyValueResponse"
+        "400":
+          description: Invalid request
+          x-go-name: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          x-go-name: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteKey
+      summary: Delete a key-value pair
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Key to delete
+      responses:
+        "200":
+          description: Key deleted successfully
+          x-go-name: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyResponse"
+        "404":
+          description: Key not found
+          x-go-name: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     Pong:
@@ -22,3 +129,39 @@ components:
         ping:
           type: string
           example: pong
+    SetRequest:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+          description: The value associated with the key
+    KeyValueResponse:
+      type: object
+      required:
+        - value
+        - key
+      properties:
+        value:
+          type: string
+          description: The value associated with the key
+        key:
+          type: string
+          description: The key
+    KeyResponse:
+      type: object
+      required:
+        - key
+      properties:
+        key:
+          type: string
+          description: The key that was operated on
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message

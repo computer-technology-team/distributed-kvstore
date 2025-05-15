@@ -31,26 +31,10 @@ type Config struct {
 
 // ConfigFlags defines all the configuration flags for the application
 var ConfigFlags = []FlagConfig{
-	{"log-level", "log_level", slog.LevelInfo.String(), "Log level (debug, info, warn, error)"},
+	{"log-level", "log_level", slog.LevelInfo, "Log level (debug, info, warn, error)"},
 	{"server.host", "server.host", "localhost", "Server host"},
 	{"server.port", "server.port", 8080, "Server port"},
 	{"client.server-url", "client.server_url", "", "KVStore server URL for client commands"},
-}
-
-// parseLogLevel converts a string log level to slog.Level
-func parseLogLevel(level string) (slog.Level, error) {
-	switch strings.ToLower(level) {
-	case "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn", "warning":
-		return slog.LevelWarn, nil
-	case "error":
-		return slog.LevelError, nil
-	default:
-		return slog.LevelInfo, fmt.Errorf("unknown log level: %s", level)
-	}
 }
 
 // InitViper initializes a new Viper instance with default settings
@@ -85,19 +69,19 @@ func InitViper(configFile string) *viper.Viper {
 // AddFlags adds configuration flags to the given cobra command
 func AddFlags(cmd *cobra.Command) {
 	// Add config file flag
-	cmd.PersistentFlags().String("config", "", "Config file path")
+	cmd.Flags().String("config", "", "Config file path")
 
 	// Add flags for all configuration options using the global ConfigFlags
 	for _, fc := range ConfigFlags {
 		switch v := fc.Default.(type) {
 		case string:
-			cmd.PersistentFlags().String(fc.FlagName, v, fc.Usage)
+			cmd.Flags().String(fc.FlagName, v, fc.Usage)
 		case int:
-			cmd.PersistentFlags().Int(fc.FlagName, v, fc.Usage)
+			cmd.Flags().Int(fc.FlagName, v, fc.Usage)
 		case bool:
-			cmd.PersistentFlags().Bool(fc.FlagName, v, fc.Usage)
+			cmd.Flags().Bool(fc.FlagName, v, fc.Usage)
 		case float64:
-			cmd.PersistentFlags().Float64(fc.FlagName, v, fc.Usage)
+			cmd.Flags().Float64(fc.FlagName, v, fc.Usage)
 		default:
 			slog.Error("invalid value type", "value", v)
 		}
@@ -152,16 +136,6 @@ func LoadConfig(cmd *cobra.Command) (*Config, error) {
 	// Apply the configuration to our struct
 	if err := v.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	// Handle log level parsing if it's a string
-	if logLevelStr, ok := v.Get("log_level").(string); ok {
-		level, err := parseLogLevel(logLevelStr)
-		if err != nil {
-			slog.Warn("Invalid log level, using default", "error", err)
-		} else {
-			config.LogLevel = level
-		}
 	}
 
 	return &config, nil

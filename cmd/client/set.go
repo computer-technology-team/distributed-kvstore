@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/kvstore"
+	"github.com/computer-technology-team/distributed-kvstore/config"
 )
 
 // NewSetCmd creates a new set command
@@ -18,7 +19,12 @@ func NewSetCmd() *cobra.Command {
 			ctx := cmd.Context()
 			key, value := args[0], args[1]
 
-			client, err := createClient()
+			cfg, err := config.LoadConfig(cmd)
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			client, err := createClient(cfg.Client.ServerURL)
 			if err != nil {
 				return err
 			}

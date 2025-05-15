@@ -4,6 +4,7 @@
 package kvstore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,13 +14,44 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
+
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	// Error Error message
+	Error string `json:"error"`
+}
+
+// KeyResponse defines model for KeyResponse.
+type KeyResponse struct {
+	// Key The key that was operated on
+	Key string `json:"key"`
+}
+
+// KeyValueResponse defines model for KeyValueResponse.
+type KeyValueResponse struct {
+	// Key The key
+	Key string `json:"key"`
+
+	// Value The value associated with the key
+	Value string `json:"value"`
+}
 
 // Pong defines model for Pong.
 type Pong struct {
 	Ping string `json:"ping"`
 }
+
+// SetRequest defines model for SetRequest.
+type SetRequest struct {
+	// Value The value associated with the key
+	Value string `json:"value"`
+}
+
+// SetValueJSONRequestBody defines body for SetValue for application/json ContentType.
+type SetValueJSONRequestBody = SetRequest
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -94,12 +126,23 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// GetPing request
-	GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// DeleteKey request
+	DeleteKey(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetValue request
+	GetValue(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetValueWithBody request with any body
+	SetValueWithBody(ctx context.Context, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SetValue(ctx context.Context, key string, body SetValueJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PingServer request
+	PingServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
-func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetPingRequest(c.Server)
+func (c *Client) DeleteKey(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteKeyRequest(c.Server, key)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +153,171 @@ func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*h
 	return c.Client.Do(req)
 }
 
-// NewGetPingRequest generates requests for GetPing
-func NewGetPingRequest(server string) (*http.Request, error) {
+func (c *Client) GetValue(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetValueRequest(c.Server, key)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SetValueWithBody(ctx context.Context, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetValueRequestWithBody(c.Server, key, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SetValue(ctx context.Context, key string, body SetValueJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetValueRequest(c.Server, key, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PingServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPingServerRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewDeleteKeyRequest generates requests for DeleteKey
+func NewDeleteKeyRequest(server string, key string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "key", runtime.ParamLocationPath, key)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/kv/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetValueRequest generates requests for GetValue
+func NewGetValueRequest(server string, key string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "key", runtime.ParamLocationPath, key)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/kv/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetValueRequest calls the generic SetValue builder with application/json body
+func NewSetValueRequest(server string, key string, body SetValueJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetValueRequestWithBody(server, key, "application/json", bodyReader)
+}
+
+// NewSetValueRequestWithBody generates requests for SetValue with any type of body
+func NewSetValueRequestWithBody(server string, key string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "key", runtime.ParamLocationPath, key)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/kv/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewPingServerRequest generates requests for PingServer
+func NewPingServerRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -180,18 +386,30 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// GetPingWithResponse request
-	GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error)
+	// DeleteKeyWithResponse request
+	DeleteKeyWithResponse(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*DeleteKeyResponse, error)
+
+	// GetValueWithResponse request
+	GetValueWithResponse(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*GetValueResponse, error)
+
+	// SetValueWithBodyWithResponse request with any body
+	SetValueWithBodyWithResponse(ctx context.Context, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetValueResponse, error)
+
+	SetValueWithResponse(ctx context.Context, key string, body SetValueJSONRequestBody, reqEditors ...RequestEditorFn) (*SetValueResponse, error)
+
+	// PingServerWithResponse request
+	PingServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PingServerResponse, error)
 }
 
-type GetPingResponse struct {
+type DeleteKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Pong
+	JSON200      *KeyResponse
+	JSON404      *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
-func (r GetPingResponse) Status() string {
+func (r DeleteKeyResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -199,31 +417,250 @@ func (r GetPingResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetPingResponse) StatusCode() int {
+func (r DeleteKeyResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-// GetPingWithResponse request returning *GetPingResponse
-func (c *ClientWithResponses) GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error) {
-	rsp, err := c.GetPing(ctx, reqEditors...)
+type GetValueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *KeyValueResponse
+	JSON404      *ErrorResponse
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetValueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetValueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SetValueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *KeyValueResponse
+	JSON400      *ErrorResponse
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SetValueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetValueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PingServerResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Pong
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r PingServerResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PingServerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// DeleteKeyWithResponse request returning *DeleteKeyResponse
+func (c *ClientWithResponses) DeleteKeyWithResponse(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*DeleteKeyResponse, error) {
+	rsp, err := c.DeleteKey(ctx, key, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetPingResponse(rsp)
+	return ParseDeleteKeyResponse(rsp)
 }
 
-// ParseGetPingResponse parses an HTTP response from a GetPingWithResponse call
-func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
+// GetValueWithResponse request returning *GetValueResponse
+func (c *ClientWithResponses) GetValueWithResponse(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*GetValueResponse, error) {
+	rsp, err := c.GetValue(ctx, key, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetValueResponse(rsp)
+}
+
+// SetValueWithBodyWithResponse request with arbitrary body returning *SetValueResponse
+func (c *ClientWithResponses) SetValueWithBodyWithResponse(ctx context.Context, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetValueResponse, error) {
+	rsp, err := c.SetValueWithBody(ctx, key, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetValueResponse(rsp)
+}
+
+func (c *ClientWithResponses) SetValueWithResponse(ctx context.Context, key string, body SetValueJSONRequestBody, reqEditors ...RequestEditorFn) (*SetValueResponse, error) {
+	rsp, err := c.SetValue(ctx, key, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetValueResponse(rsp)
+}
+
+// PingServerWithResponse request returning *PingServerResponse
+func (c *ClientWithResponses) PingServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PingServerResponse, error) {
+	rsp, err := c.PingServer(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePingServerResponse(rsp)
+}
+
+// ParseDeleteKeyResponse parses an HTTP response from a DeleteKeyWithResponse call
+func ParseDeleteKeyResponse(rsp *http.Response) (*DeleteKeyResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetPingResponse{
+	response := &DeleteKeyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KeyResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetValueResponse parses an HTTP response from a GetValueWithResponse call
+func ParseGetValueResponse(rsp *http.Response) (*GetValueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetValueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KeyValueResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetValueResponse parses an HTTP response from a SetValueWithResponse call
+func ParseSetValueResponse(rsp *http.Response) (*SetValueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetValueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest KeyValueResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePingServerResponse parses an HTTP response from a PingServerWithResponse call
+func ParsePingServerResponse(rsp *http.Response) (*PingServerResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PingServerResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -236,6 +673,13 @@ func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -243,17 +687,45 @@ func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
+	// Delete a key-value pair
+	// (DELETE /kv/{key})
+	DeleteKey(w http.ResponseWriter, r *http.Request, key string)
+	// Get a value by key
+	// (GET /kv/{key})
+	GetValue(w http.ResponseWriter, r *http.Request, key string)
+	// Set a key-value pair
+	// (PUT /kv/{key})
+	SetValue(w http.ResponseWriter, r *http.Request, key string)
+	// Health check endpoint
 	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
+	PingServer(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
+// Delete a key-value pair
+// (DELETE /kv/{key})
+func (_ Unimplemented) DeleteKey(w http.ResponseWriter, r *http.Request, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a value by key
+// (GET /kv/{key})
+func (_ Unimplemented) GetValue(w http.ResponseWriter, r *http.Request, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Set a key-value pair
+// (PUT /kv/{key})
+func (_ Unimplemented) SetValue(w http.ResponseWriter, r *http.Request, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Health check endpoint
 // (GET /ping)
-func (_ Unimplemented) GetPing(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) PingServer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -266,11 +738,86 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
+// DeleteKey operation middleware
+func (siw *ServerInterfaceWrapper) DeleteKey(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
+		siw.Handler.DeleteKey(w, r, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetValue operation middleware
+func (siw *ServerInterfaceWrapper) GetValue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetValue(w, r, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetValue operation middleware
+func (siw *ServerInterfaceWrapper) SetValue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetValue(w, r, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PingServer operation middleware
+func (siw *ServerInterfaceWrapper) PingServer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PingServer(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -394,33 +941,166 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/ping", wrapper.GetPing)
+		r.Delete(options.BaseURL+"/kv/{key}", wrapper.DeleteKey)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/kv/{key}", wrapper.GetValue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/kv/{key}", wrapper.SetValue)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/ping", wrapper.PingServer)
 	})
 
 	return r
 }
 
-type GetPingRequestObject struct {
+type DeleteKeyRequestObject struct {
+	Key string `json:"key"`
 }
 
-type GetPingResponseObject interface {
-	VisitGetPingResponse(w http.ResponseWriter) error
+type DeleteKeyResponseObject interface {
+	VisitDeleteKeyResponse(w http.ResponseWriter) error
 }
 
-type GetPing200JSONResponse Pong
+type DeleteKey200JSONResponse KeyResponse
 
-func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWriter) error {
+func (response DeleteKey200JSONResponse) VisitDeleteKeyResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
+type DeleteKey404JSONResponse ErrorResponse
+
+func (response DeleteKey404JSONResponse) VisitDeleteKeyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetValueRequestObject struct {
+	Key string `json:"key"`
+}
+
+type GetValueResponseObject interface {
+	VisitGetValueResponse(w http.ResponseWriter) error
+}
+
+type GetValue200JSONResponse KeyValueResponse
+
+func (response GetValue200JSONResponse) VisitGetValueResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetValue404JSONResponse ErrorResponse
+
+func (response GetValue404JSONResponse) VisitGetValueResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetValuedefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response GetValuedefaultJSONResponse) VisitGetValueResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type SetValueRequestObject struct {
+	Key  string `json:"key"`
+	Body *SetValueJSONRequestBody
+}
+
+type SetValueResponseObject interface {
+	VisitSetValueResponse(w http.ResponseWriter) error
+}
+
+type SetValue200JSONResponse KeyValueResponse
+
+func (response SetValue200JSONResponse) VisitSetValueResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetValue400JSONResponse ErrorResponse
+
+func (response SetValue400JSONResponse) VisitSetValueResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetValuedefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response SetValuedefaultJSONResponse) VisitSetValueResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type PingServerRequestObject struct {
+}
+
+type PingServerResponseObject interface {
+	VisitPingServerResponse(w http.ResponseWriter) error
+}
+
+type PingServer200JSONResponse Pong
+
+func (response PingServer200JSONResponse) VisitPingServerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PingServerdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response PingServerdefaultJSONResponse) VisitPingServerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-
+	// Delete a key-value pair
+	// (DELETE /kv/{key})
+	DeleteKey(ctx context.Context, request DeleteKeyRequestObject) (DeleteKeyResponseObject, error)
+	// Get a value by key
+	// (GET /kv/{key})
+	GetValue(ctx context.Context, request GetValueRequestObject) (GetValueResponseObject, error)
+	// Set a key-value pair
+	// (PUT /kv/{key})
+	SetValue(ctx context.Context, request SetValueRequestObject) (SetValueResponseObject, error)
+	// Health check endpoint
 	// (GET /ping)
-	GetPing(ctx context.Context, request GetPingRequestObject) (GetPingResponseObject, error)
+	PingServer(ctx context.Context, request PingServerRequestObject) (PingServerResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -452,23 +1132,108 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// GetPing operation middleware
-func (sh *strictHandler) GetPing(w http.ResponseWriter, r *http.Request) {
-	var request GetPingRequestObject
+// DeleteKey operation middleware
+func (sh *strictHandler) DeleteKey(w http.ResponseWriter, r *http.Request, key string) {
+	var request DeleteKeyRequestObject
+
+	request.Key = key
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPing(ctx, request.(GetPingRequestObject))
+		return sh.ssi.DeleteKey(ctx, request.(DeleteKeyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPing")
+		handler = middleware(handler, "DeleteKey")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPingResponseObject); ok {
-		if err := validResponse.VisitGetPingResponse(w); err != nil {
+	} else if validResponse, ok := response.(DeleteKeyResponseObject); ok {
+		if err := validResponse.VisitDeleteKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetValue operation middleware
+func (sh *strictHandler) GetValue(w http.ResponseWriter, r *http.Request, key string) {
+	var request GetValueRequestObject
+
+	request.Key = key
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetValue(ctx, request.(GetValueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetValue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetValueResponseObject); ok {
+		if err := validResponse.VisitGetValueResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetValue operation middleware
+func (sh *strictHandler) SetValue(w http.ResponseWriter, r *http.Request, key string) {
+	var request SetValueRequestObject
+
+	request.Key = key
+
+	var body SetValueJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetValue(ctx, request.(SetValueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetValue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetValueResponseObject); ok {
+		if err := validResponse.VisitSetValueResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PingServer operation middleware
+func (sh *strictHandler) PingServer(w http.ResponseWriter, r *http.Request) {
+	var request PingServerRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PingServer(ctx, request.(PingServerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PingServer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PingServerResponseObject); ok {
+		if err := validResponse.VisitPingServerResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

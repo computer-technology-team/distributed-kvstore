@@ -8,9 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	apiKVStore "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
-	"github.com/computer-technology-team/distributed-kvstore/cmd/flags"
 	"github.com/computer-technology-team/distributed-kvstore/config"
-	"github.com/computer-technology-team/distributed-kvstore/internal/kvstore"
+	"github.com/computer-technology-team/distributed-kvstore/internal/node"
 )
 
 func NewServeNodeCmd() *cobra.Command {
@@ -18,13 +17,11 @@ func NewServeNodeCmd() *cobra.Command {
 		Use:   "servenode",
 		Short: "Runs the database node of KVStore",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfgPath, _ := cmd.Flags().GetString(flags.ConfigFileFlag)
-
-			cfg, err := config.LoadConfig(cfgPath)
+			cfg, err := config.LoadConfig(cmd)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
-			server := kvstore.NewServer()
+			server := node.NewServer()
 
 			addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 

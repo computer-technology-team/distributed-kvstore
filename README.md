@@ -63,9 +63,26 @@ Configuration is managed through Viper, which supports multiple formats (YAML, J
 Example configuration:
 
 ```yaml
+# Server configuration
 server:
   port: 8080
   host: 0.0.0.0
+
+# Client configuration
+client:
+  server_url: http://localhost:8080
+```
+
+You can specify a configuration file using the `--config` flag:
+
+```bash
+./kvstore --config /path/to/config.yaml client get mykey
+```
+
+Or use environment variables:
+
+```bash
+DIST_KV__CLIENT__SERVER_URL=http://localhost:8080 ./kvstore client get mykey
 ```
 
 ## Development
