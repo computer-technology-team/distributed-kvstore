@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	apiKVStore "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
-	"github.com/computer-technology-team/distributed-kvstore/cmd/flags"
 	"github.com/computer-technology-team/distributed-kvstore/config"
 )
 
@@ -17,9 +16,7 @@ func NewPingKVStoreCmd() *cobra.Command {
 	return &cobra.Command{
 		Use: "ping-kvstore",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfgPath, _ := cmd.Flags().GetString(flags.ConfigFileFlag)
-
-			cfg, err := config.LoadConfig(cfgPath)
+			cfg, err := config.LoadConfig(cmd)
 			if err != nil {
 				return fmt.Errorf("failed to load config: %w", err)
 			}
@@ -31,7 +28,7 @@ func NewPingKVStoreCmd() *cobra.Command {
 				return fmt.Errorf("failed to create KV store client: %w", err)
 			}
 
-			resp, err := client.GetPingWithResponse(context.Background())
+			resp, err := client.PingServerWithResponse(context.Background())
 			if err != nil {
 				return fmt.Errorf("failed to ping KV store: %w", err)
 			}

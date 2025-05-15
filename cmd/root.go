@@ -6,18 +6,20 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
-	"github.com/computer-technology-team/distributed-kvstore/cmd/flags"
+	"github.com/computer-technology-team/distributed-kvstore/cmd/client"
 	"github.com/computer-technology-team/distributed-kvstore/config"
 )
 
 func NewRootCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "dist-kv",
-		Short: "Run and Manage Distributed KV Store",
+	var rootCmd = &cobra.Command{
+		Use:   "distributed-kvstore",
+		Short: "A distributed key-value store",
+		Long: `A distributed key-value store with leader election and replication.
+	This application provides a simple interface for storing and retrieving data across a cluster of nodes.`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			configFile, _ := cmd.Flags().GetString(flags.ConfigFileFlag)
-			cfg, err := config.LoadConfig(configFile)
+			cfg, err := config.LoadConfig(nil)
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
@@ -27,24 +29,27 @@ func NewRootCmd() *cobra.Command {
 			})
 			slog.SetDefault(slog.New(logHandler))
 			slog.Info("Configuration loaded successfully")
+
+			// Bind all flags to viper
+			if err := viper.BindPFlags(cmd.PersistentFlags()); err != nil {
+				return fmt.Errorf("failed to bind flags: %w", err)
+			}
+
 			return nil
 		},
 	}
 
-	RegisterCommandRecursive(cmd)
-
-	return cmd
-}
-
-func RegisterCommandRecursive(parent *cobra.Command) {
 	versionCmd := NewVersionCmd()
 	toolsCmd := NewToolsCmd()
-
+	clientCmd := client.NewClientCmd()
+  
 	serveNodeCmd := NewServeNodeCmd()
-
 	serveLBCmd := NewServeLBCmd()
 
-	parent.AddCommand(versionCmd, toolsCmd, serveNodeCmd, serveLBCmd)
+	rootCmd.AddCommand(versionCmd, toolsCmd, clientCmd, serveNodeCmd, serveLBCmd)
+
+	return rootCmd
+
 }
 
 func Execute() {
