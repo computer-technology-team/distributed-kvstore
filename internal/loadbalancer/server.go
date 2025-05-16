@@ -2,9 +2,17 @@ package loadbalancer
 
 import (
 	"context"
+	"fmt"
+	"iter"
+	"math/rand/v2"
+	"net/http"
+	"sync/atomic"
 
+	"github.com/computer-technology-team/distributed-kvstore/api/common"
+	"github.com/computer-technology-team/distributed-kvstore/api/controller"
 	kvstoreAPI "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
 	"github.com/computer-technology-team/distributed-kvstore/api/loadbalancer"
+	"github.com/samber/lo"
 )
 
 type LoadBalancer interface {
@@ -12,33 +20,15 @@ type LoadBalancer interface {
 	loadbalancer.StrictServerInterface
 }
 
-type server struct{}
-
-// GetPing implements LoadBalancer.
-func (s *server) GetPing(ctx context.Context, request loadbalancer.GetPingRequestObject) (loadbalancer.GetPingResponseObject, error) {
-	panic("unimplemented")
-}
-
-// GetState implements LoadBalancer.
-func (s *server) GetState(ctx context.Context, request loadbalancer.GetStateRequestObject) (loadbalancer.GetStateResponseObject, error) {
-	panic("unimplemented")
+type server struct {
+	statePtr   atomic.Pointer[common.State]
+	httpClient *http.Client
 }
 
 // SetState implements LoadBalancer.
 func (s *server) SetState(ctx context.Context, request loadbalancer.SetStateRequestObject) (loadbalancer.SetStateResponseObject, error) {
-	panic("unimplemented")
-}
-
-// DeleteKey implements LoadBalancer.
-func (s *server) DeleteKey(ctx context.Context,
-	request kvstoreAPI.DeleteKeyRequestObject) (kvstoreAPI.DeleteKeyResponseObject, error) {
-	panic("unimplemented")
-}
-
-// GetValue implements LoadBalancer.
-func (s *server) GetValue(ctx context.Context,
-	request kvstoreAPI.GetValueRequestObject) (kvstoreAPI.GetValueResponseObject, error) {
-	panic("unimplemented")
+	s.statePtr.Store(request.Body)
+	return loadbalancer.SetState200JSONResponse{}, nil
 }
 
 // PingServer implements LoadBalancer.
@@ -47,12 +37,39 @@ func (s *server) PingServer(ctx context.Context,
 	return kvstoreAPI.PingServer200JSONResponse{Ping: "Pong"}, nil
 }
 
-// SetValue implements LoadBalancer.
-func (s *server) SetValue(ctx context.Context,
-	request kvstoreAPI.SetValueRequestObject) (kvstoreAPI.SetValueResponseObject, error) {
-	panic("unimplemented")
+func NewServer(ctx context.Context, controllerClient controller.ClientWithResponsesInterface) (LoadBalancer, error) {
+	resp, err := controllerClient.GetStateWithResponse(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get state from controller: %w", err)
+	}
+
+	srv := &server{
+		httpClient: http.DefaultClient,
+	}
+	srv.statePtr.Store(resp.JSON200)
+	return srv, nil
 }
 
-func NewServer() LoadBalancer {
-	return &server{}
+func replicaPredicate(partition *common.Partition) func(common.Replica) bool {
+	return func(replica common.Replica) bool {
+		return replica.Id == partition.MasterReplicaId
+	}
+}
+
+func balanceReplicaIter(replicas []common.Replica) iter.Seq[common.Replica] {
+	selectedPartitionIdx := rand.IntN(len(replicas))
+	return func(yield func(common.Replica) bool) {
+		for i := range len(replicas) {
+			idx := (i + selectedPartitionIdx) % len(replicas)
+			if !yield(replicas[idx]) {
+				return
+			}
+		}
+	}
+}
+
+func filterHealthyReplica(replicas []common.Replica) []common.Replica {
+	return lo.Filter(replicas, func(replica common.Replica, _ int) bool {
+		return replica.Status == common.Healthy
+	})
 }

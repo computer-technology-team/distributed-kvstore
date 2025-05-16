@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Distributed KV Store</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <header>
+        <h1>Distributed KV Store Admin</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/partitions">Partitions</a></li>
+                <li><a href="/nodes">Nodes</a></li>
+                <li><a href="/stats">System Stats</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>{{ .Title }}</h2>
+        
+        <div class="action-panel">
+            <h3>Add New Partition</h3>
+            <form action="/partitions/add" method="POST">
+                <div class="form-group">
+                    <label for="partition_id">Partition ID:</label>
+                    <input type="text" id="partition_id" name="partition_id" required>
+                </div>
+                <button type="submit" class="btn">Add Partition</button>
+            </form>
+        </div>
+        
+        <div class="partitions-list">
+            <h3>Current Partitions</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Nodes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Partitions}}
+                    <tr>
+                        <td>{{.Id}}</td>
+                        <td>-</td>
+                        <td>{{len .Replicas}}</td>
+                        <td>
+                            <a href="/partitions/{{.Id}}" class="btn-small">View Details</a>
+                            <form action="/partitions/remove" method="POST" class="inline-form">
+                                <input type="hidden" name="partition_id" value="{{.Id}}">
+                                <button type="submit" class="btn-small btn-danger">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <footer>
+        <p>&copy; Distributed KV Store</p>
+    </footer>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

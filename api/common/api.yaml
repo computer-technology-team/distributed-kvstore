@@ -4,16 +4,39 @@ info:
   title: Minimal ping API server
 components:
   schemas:
+    Status:
+      type: string
+      description: Current status of a node or replica
+      enum: [healthy, unhealthy, syncing, uninitialized, unregistered]
+      example: "healthy"
     State:
       type: object
       required:
         - partitions
+        - virtualNodes
+        - nodes
+        - unRegisteredNodes
       properties:
         partitions:
           type: array
           description: Array of partitions in the distributed key-value store
           items:
             $ref: "#/components/schemas/Partition"
+        virtualNodes:
+          type: array
+          description: Array of virtual nodes used for consistent hashing
+          items:
+            $ref: "#/components/schemas/VirtualNode"
+        nodes:
+          type: array
+          description: Array of nodes used for controller
+          items:
+            $ref: "#/components/schemas/Node"
+        unRegisteredNodes:
+          type: array
+          description: Array of nodes used for controller
+          items:
+            $ref: "#/components/schemas/Node"
     Partition:
       type: object
       required:
@@ -32,9 +55,9 @@ components:
             $ref: "#/components/schemas/Replica"
         masterReplicaId:
           type: string
+          format: uuid
           description: >-
             ID of the replica that is currently the master for this partition
-          example: "replica-1"
     Replica:
       type: object
       required:
@@ -44,14 +67,53 @@ components:
       properties:
         id:
           type: string
-          description: Unique identifier for the replica
-          example: "replica-1"
+          format: uuid
+          description: Unique identifier for the node
+          example: "123e4567-e89b-12d3-a456-426614174000"
         address:
           type: string
           description: Network address of the replica
           example: "192.168.1.10:8080"
         status:
+          $ref: "#/components/schemas/Status"
+    Node:
+      type: object
+      required:
+        - id
+        - address
+        - status
+      properties:
+        id:
           type: string
-          description: Current status of the replica
-          enum: [healthy, unhealthy, syncing]
-          example: "healthy"
+          format: uuid
+          description: Unique identifier for the node
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        address:
+          type: string
+          description: Network address of the node
+          example: "192.168.1.10:8080"
+        status:
+          $ref: "#/components/schemas/Status"
+        partitionID:
+          type: string
+    VirtualNode:
+      type: object
+      required:
+        - id
+        - hash
+        - partitionId
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the virtual node
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        hash:
+          type: integer
+          format: int64
+          description: Hash value used for consistent hashing
+          example: 12345678
+        partitionId:
+          type: string
+          description: ID of the partition this virtual node maps to
+          example: "partition-1"

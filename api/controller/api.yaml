@@ -3,22 +3,56 @@ info:
   version: 1.0.0
   title: Minimal ping API server
 paths:
-  /ping:
+  /state:
     get:
       responses:
         "200":
-          description: ping response
+          description: Retrieved State Successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Pong"
+                $ref: "../common/api.yaml#/components/schemas/State"
+  /nodes/register:
+    post:
+      summary: Register a new node with the controller
+      description: Endpoint for nodes to register themselves when starting up
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NodeRegistration"
+      responses:
+        "201":
+          description: Node registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeRegistrationResponse"
+        "400":
+          description: Invalid request
+        "409":
+          description: Node already registered
 components:
   schemas:
-    Pong:
+    NodeRegistration:
       type: object
       required:
-        - ping
+        - address
       properties:
-        ping:
+        address:
           type: string
-          example: pong
+          description: Network address of the node (host:port)
+          example: "192.168.1.10:8080"
+    NodeRegistrationResponse:
+      type: object
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Assigned unique identifier for the node
+        status:
+          $ref: "../common/api.yaml#/components/schemas/Status"

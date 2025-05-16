@@ -5,15 +5,20 @@ import (
 
 	kvstoreAPI "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
 	"github.com/computer-technology-team/distributed-kvstore/internal/kvstore"
+	"github.com/google/uuid"
+	"github.com/oapi-codegen/runtime/types"
 )
 
 type server struct {
 	kvStore *kvstore.KVStore
+	id      uuid.UUID
 }
 
-func NewServer() kvstoreAPI.StrictServerInterface {
+func NewServer(id types.UUID) kvstoreAPI.StrictServerInterface {
+
 	return &server{
 		kvStore: kvstore.NewKVStore(),
+		id:      uuid.UUID(id),
 	}
 }
 

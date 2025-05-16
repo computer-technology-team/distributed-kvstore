@@ -16,7 +16,7 @@ func NewDeleteCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			cfg, err := config.LoadConfig(cmd)
+			cfg, err := config.LoadConfig(cmd.Flags())
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

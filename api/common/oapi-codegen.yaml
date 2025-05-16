@@ -4,4 +4,5 @@ generate:
   models: true
 output: common.gen.go
 output-options:
+  skip-prune: true
   nullable-type: true

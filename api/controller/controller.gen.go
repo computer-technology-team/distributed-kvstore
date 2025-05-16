@@ -4,6 +4,7 @@
 package controller
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,14 +13,29 @@ import (
 	"net/url"
 	"strings"
 
+	externalRef0 "github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/go-chi/chi/v5"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
-// Pong defines model for Pong.
-type Pong struct {
-	Ping string `json:"ping"`
+// NodeRegistration defines model for NodeRegistration.
+type NodeRegistration struct {
+	// Address Network address of the node (host:port)
+	Address string `json:"address"`
 }
+
+// NodeRegistrationResponse defines model for NodeRegistrationResponse.
+type NodeRegistrationResponse struct {
+	// Id Assigned unique identifier for the node
+	Id openapi_types.UUID `json:"id"`
+
+	// Status Current status of a node or replica
+	Status externalRef0.Status `json:"status"`
+}
+
+// PostNodesRegisterJSONRequestBody defines body for PostNodesRegister for application/json ContentType.
+type PostNodesRegisterJSONRequestBody = NodeRegistration
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -94,12 +110,17 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// GetPing request
-	GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// PostNodesRegisterWithBody request with any body
+	PostNodesRegisterWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PostNodesRegister(ctx context.Context, body PostNodesRegisterJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetState request
+	GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
-func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetPingRequest(c.Server)
+func (c *Client) PostNodesRegisterWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostNodesRegisterRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +131,43 @@ func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*h
 	return c.Client.Do(req)
 }
 
-// NewGetPingRequest generates requests for GetPing
-func NewGetPingRequest(server string) (*http.Request, error) {
+func (c *Client) PostNodesRegister(ctx context.Context, body PostNodesRegisterJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostNodesRegisterRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetStateRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewPostNodesRegisterRequest calls the generic PostNodesRegister builder with application/json body
+func NewPostNodesRegisterRequest(server string, body PostNodesRegisterJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPostNodesRegisterRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPostNodesRegisterRequestWithBody generates requests for PostNodesRegister with any type of body
+func NewPostNodesRegisterRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -119,7 +175,36 @@ func NewGetPingRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/ping")
+	operationPath := fmt.Sprintf("/nodes/register")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetStateRequest generates requests for GetState
+func NewGetStateRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/state")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -180,18 +265,23 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// GetPingWithResponse request
-	GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error)
+	// PostNodesRegisterWithBodyWithResponse request with any body
+	PostNodesRegisterWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostNodesRegisterResponse, error)
+
+	PostNodesRegisterWithResponse(ctx context.Context, body PostNodesRegisterJSONRequestBody, reqEditors ...RequestEditorFn) (*PostNodesRegisterResponse, error)
+
+	// GetStateWithResponse request
+	GetStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStateResponse, error)
 }
 
-type GetPingResponse struct {
+type PostNodesRegisterResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Pong
+	JSON201      *NodeRegistrationResponse
 }
 
 // Status returns HTTPResponse.Status
-func (r GetPingResponse) Status() string {
+func (r PostNodesRegisterResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -199,38 +289,103 @@ func (r GetPingResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetPingResponse) StatusCode() int {
+func (r PostNodesRegisterResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-// GetPingWithResponse request returning *GetPingResponse
-func (c *ClientWithResponses) GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error) {
-	rsp, err := c.GetPing(ctx, reqEditors...)
+type GetStateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *externalRef0.State
+}
+
+// Status returns HTTPResponse.Status
+func (r GetStateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetStateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// PostNodesRegisterWithBodyWithResponse request with arbitrary body returning *PostNodesRegisterResponse
+func (c *ClientWithResponses) PostNodesRegisterWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostNodesRegisterResponse, error) {
+	rsp, err := c.PostNodesRegisterWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetPingResponse(rsp)
+	return ParsePostNodesRegisterResponse(rsp)
 }
 
-// ParseGetPingResponse parses an HTTP response from a GetPingWithResponse call
-func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
+func (c *ClientWithResponses) PostNodesRegisterWithResponse(ctx context.Context, body PostNodesRegisterJSONRequestBody, reqEditors ...RequestEditorFn) (*PostNodesRegisterResponse, error) {
+	rsp, err := c.PostNodesRegister(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostNodesRegisterResponse(rsp)
+}
+
+// GetStateWithResponse request returning *GetStateResponse
+func (c *ClientWithResponses) GetStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStateResponse, error) {
+	rsp, err := c.GetState(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetStateResponse(rsp)
+}
+
+// ParsePostNodesRegisterResponse parses an HTTP response from a PostNodesRegisterWithResponse call
+func ParsePostNodesRegisterResponse(rsp *http.Response) (*PostNodesRegisterResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetPingResponse{
+	response := &PostNodesRegisterResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest NodeRegistrationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetStateResponse parses an HTTP response from a GetStateWithResponse call
+func ParseGetStateResponse(rsp *http.Response) (*GetStateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetStateResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Pong
+		var dest externalRef0.State
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -243,17 +398,26 @@ func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Register a new node with the controller
+	// (POST /nodes/register)
+	PostNodesRegister(w http.ResponseWriter, r *http.Request)
 
-	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
+	// (GET /state)
+	GetState(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// (GET /ping)
-func (_ Unimplemented) GetPing(w http.ResponseWriter, r *http.Request) {
+// Register a new node with the controller
+// (POST /nodes/register)
+func (_ Unimplemented) PostNodesRegister(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// (GET /state)
+func (_ Unimplemented) GetState(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -266,11 +430,25 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
+// PostNodesRegister operation middleware
+func (siw *ServerInterfaceWrapper) PostNodesRegister(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
+		siw.Handler.PostNodesRegister(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetState operation middleware
+func (siw *ServerInterfaceWrapper) GetState(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetState(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -394,22 +572,58 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/ping", wrapper.GetPing)
+		r.Post(options.BaseURL+"/nodes/register", wrapper.PostNodesRegister)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/state", wrapper.GetState)
 	})
 
 	return r
 }
 
-type GetPingRequestObject struct {
+type PostNodesRegisterRequestObject struct {
+	Body *PostNodesRegisterJSONRequestBody
 }
 
-type GetPingResponseObject interface {
-	VisitGetPingResponse(w http.ResponseWriter) error
+type PostNodesRegisterResponseObject interface {
+	VisitPostNodesRegisterResponse(w http.ResponseWriter) error
 }
 
-type GetPing200JSONResponse Pong
+type PostNodesRegister201JSONResponse NodeRegistrationResponse
 
-func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWriter) error {
+func (response PostNodesRegister201JSONResponse) VisitPostNodesRegisterResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PostNodesRegister400Response struct {
+}
+
+func (response PostNodesRegister400Response) VisitPostNodesRegisterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type PostNodesRegister409Response struct {
+}
+
+func (response PostNodesRegister409Response) VisitPostNodesRegisterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(409)
+	return nil
+}
+
+type GetStateRequestObject struct {
+}
+
+type GetStateResponseObject interface {
+	VisitGetStateResponse(w http.ResponseWriter) error
+}
+
+type GetState200JSONResponse externalRef0.State
+
+func (response GetState200JSONResponse) VisitGetStateResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -418,9 +632,12 @@ func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWrite
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Register a new node with the controller
+	// (POST /nodes/register)
+	PostNodesRegister(ctx context.Context, request PostNodesRegisterRequestObject) (PostNodesRegisterResponseObject, error)
 
-	// (GET /ping)
-	GetPing(ctx context.Context, request GetPingRequestObject) (GetPingResponseObject, error)
+	// (GET /state)
+	GetState(ctx context.Context, request GetStateRequestObject) (GetStateResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -452,23 +669,54 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// GetPing operation middleware
-func (sh *strictHandler) GetPing(w http.ResponseWriter, r *http.Request) {
-	var request GetPingRequestObject
+// PostNodesRegister operation middleware
+func (sh *strictHandler) PostNodesRegister(w http.ResponseWriter, r *http.Request) {
+	var request PostNodesRegisterRequestObject
+
+	var body PostNodesRegisterJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPing(ctx, request.(GetPingRequestObject))
+		return sh.ssi.PostNodesRegister(ctx, request.(PostNodesRegisterRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPing")
+		handler = middleware(handler, "PostNodesRegister")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPingResponseObject); ok {
-		if err := validResponse.VisitGetPingResponse(w); err != nil {
+	} else if validResponse, ok := response.(PostNodesRegisterResponseObject); ok {
+		if err := validResponse.VisitPostNodesRegisterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetState operation middleware
+func (sh *strictHandler) GetState(w http.ResponseWriter, r *http.Request) {
+	var request GetStateRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetState(ctx, request.(GetStateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetState")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetStateResponseObject); ok {
+		if err := validResponse.VisitGetStateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

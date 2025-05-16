@@ -20,25 +20,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StateResponse"
-  /ping:
-    get:
-      responses:
-        "200":
-          description: ping response
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Pong"
 components:
   schemas:
-    Pong:
-      type: object
-      required:
-        - ping
-      properties:
-        ping:
-          type: string
-          example: pong
     StateResponse:
       type: object
       properties:

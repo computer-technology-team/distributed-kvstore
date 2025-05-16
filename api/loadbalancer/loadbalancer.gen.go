@@ -18,11 +18,6 @@ import (
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
-// Pong defines model for Pong.
-type Pong struct {
-	Ping string `json:"ping"`
-}
-
 // StateResponse defines model for StateResponse.
 type StateResponse struct {
 	// Message Optional message providing additional information
@@ -105,25 +100,10 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// GetPing request
-	GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// SetStateWithBody request with any body
 	SetStateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SetState(ctx context.Context, body SetStateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
-
-func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetPingRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
 }
 
 func (c *Client) SetStateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -148,33 +128,6 @@ func (c *Client) SetState(ctx context.Context, body SetStateJSONRequestBody, req
 		return nil, err
 	}
 	return c.Client.Do(req)
-}
-
-// NewGetPingRequest generates requests for GetPing
-func NewGetPingRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/ping")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
 }
 
 // NewSetStateRequest calls the generic SetState builder with application/json body
@@ -260,35 +213,10 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// GetPingWithResponse request
-	GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error)
-
 	// SetStateWithBodyWithResponse request with any body
 	SetStateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetStateResponse, error)
 
 	SetStateWithResponse(ctx context.Context, body SetStateJSONRequestBody, reqEditors ...RequestEditorFn) (*SetStateResponse, error)
-}
-
-type GetPingResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Pong
-}
-
-// Status returns HTTPResponse.Status
-func (r GetPingResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetPingResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
 }
 
 type SetStateResponse struct {
@@ -313,15 +241,6 @@ func (r SetStateResponse) StatusCode() int {
 	return 0
 }
 
-// GetPingWithResponse request returning *GetPingResponse
-func (c *ClientWithResponses) GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error) {
-	rsp, err := c.GetPing(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetPingResponse(rsp)
-}
-
 // SetStateWithBodyWithResponse request with arbitrary body returning *SetStateResponse
 func (c *ClientWithResponses) SetStateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetStateResponse, error) {
 	rsp, err := c.SetStateWithBody(ctx, contentType, body, reqEditors...)
@@ -337,32 +256,6 @@ func (c *ClientWithResponses) SetStateWithResponse(ctx context.Context, body Set
 		return nil, err
 	}
 	return ParseSetStateResponse(rsp)
-}
-
-// ParseGetPingResponse parses an HTTP response from a GetPingWithResponse call
-func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetPingResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Pong
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
 }
 
 // ParseSetStateResponse parses an HTTP response from a SetStateWithResponse call
@@ -393,9 +286,6 @@ func ParseSetStateResponse(rsp *http.Response) (*SetStateResponse, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
-	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
 	// Sets the loadbalancer state
 	// (PUT /state)
 	SetState(w http.ResponseWriter, r *http.Request)
@@ -404,11 +294,6 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
-
-// (GET /ping)
-func (_ Unimplemented) GetPing(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
 
 // Sets the loadbalancer state
 // (PUT /state)
@@ -424,20 +309,6 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
-
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
 
 // SetState operation middleware
 func (siw *ServerInterfaceWrapper) SetState(w http.ResponseWriter, r *http.Request) {
@@ -567,29 +438,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/ping", wrapper.GetPing)
-	})
-	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/state", wrapper.SetState)
 	})
 
 	return r
-}
-
-type GetPingRequestObject struct {
-}
-
-type GetPingResponseObject interface {
-	VisitGetPingResponse(w http.ResponseWriter) error
-}
-
-type GetPing200JSONResponse Pong
-
-func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
 }
 
 type SetStateRequestObject struct {
@@ -611,9 +463,6 @@ func (response SetState200JSONResponse) VisitSetStateResponse(w http.ResponseWri
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-
-	// (GET /ping)
-	GetPing(ctx context.Context, request GetPingRequestObject) (GetPingResponseObject, error)
 	// Sets the loadbalancer state
 	// (PUT /state)
 	SetState(ctx context.Context, request SetStateRequestObject) (SetStateResponseObject, error)
@@ -646,30 +495,6 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
-}
-
-// GetPing operation middleware
-func (sh *strictHandler) GetPing(w http.ResponseWriter, r *http.Request) {
-	var request GetPingRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPing(ctx, request.(GetPingRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPing")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPingResponseObject); ok {
-		if err := validResponse.VisitGetPingResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
 }
 
 // SetState operation middleware
