@@ -22,9 +22,9 @@ func (s *State) GetPartition(key string) (*Partition, error) {
 
 	partitionId := s.VirtualNodes[idx].PartitionId
 
-	for i := range s.Partitions {
-		if s.Partitions[i].Id == partitionId {
-			return &s.Partitions[i], nil
+	for _, partition := range s.Partitions {
+		if partition.Id == partitionId {
+			return &partition, nil
 		}
 	}
 

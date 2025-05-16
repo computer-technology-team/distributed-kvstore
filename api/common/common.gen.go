@@ -22,8 +22,16 @@ type Node struct {
 	Address string `json:"address"`
 
 	// Id Unique identifier for the node
-	Id          openapi_types.UUID `json:"id"`
-	PartitionID *string            `json:"partitionID,omitempty"`
+	Id openapi_types.UUID `json:"id"`
+
+	// IsMaster Whether this node is the master for its replica
+	IsMaster *bool `json:"isMaster,omitempty"`
+
+	// PartitionID ID of the partition this node belongs to (if any)
+	PartitionID *string `json:"partitionID,omitempty"`
+
+	// ReplicaID ID of the replica this node belongs to (if any)
+	ReplicaID *openapi_types.UUID `json:"replicaID,omitempty"`
 
 	// Status Current status of a node or replica
 	Status Status `json:"status"`
@@ -38,7 +46,7 @@ type Partition struct {
 	MasterReplicaId openapi_types.UUID `json:"masterReplicaId"`
 
 	// Replicas List of replicas for this partition
-	Replicas []Replica `json:"replicas"`
+	Replicas []Node `json:"replicas"`
 }
 
 // Replica defines model for Replica.
@@ -55,13 +63,13 @@ type Replica struct {
 
 // State defines model for State.
 type State struct {
-	// Nodes Array of nodes used for controller
+	// Nodes Array of active nodes in the cluster
 	Nodes []Node `json:"nodes"`
 
-	// Partitions Array of partitions in the distributed key-value store
-	Partitions []Partition `json:"partitions"`
+	// Partitions Map of partitions in the distributed key-value store, keyed by partition ID
+	Partitions map[string]Partition `json:"partitions"`
 
-	// UnRegisteredNodes Array of nodes used for controller
+	// UnRegisteredNodes Array of nodes that have not been fully registered
 	UnRegisteredNodes []Node `json:"unRegisteredNodes"`
 
 	// VirtualNodes Array of virtual nodes used for consistent hashing

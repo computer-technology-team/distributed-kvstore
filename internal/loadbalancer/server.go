@@ -50,15 +50,15 @@ func NewServer(ctx context.Context, controllerClient controller.ClientWithRespon
 	return srv, nil
 }
 
-func replicaPredicate(partition *common.Partition) func(common.Replica) bool {
-	return func(replica common.Replica) bool {
+func replicaPredicate(partition *common.Partition) func(common.Node) bool {
+	return func(replica common.Node) bool {
 		return replica.Id == partition.MasterReplicaId
 	}
 }
 
-func balanceReplicaIter(replicas []common.Replica) iter.Seq[common.Replica] {
+func balanceReplicaIter(replicas []common.Node) iter.Seq[common.Node] {
 	selectedPartitionIdx := rand.IntN(len(replicas))
-	return func(yield func(common.Replica) bool) {
+	return func(yield func(common.Node) bool) {
 		for i := range len(replicas) {
 			idx := (i + selectedPartitionIdx) % len(replicas)
 			if !yield(replicas[idx]) {
@@ -68,8 +68,8 @@ func balanceReplicaIter(replicas []common.Replica) iter.Seq[common.Replica] {
 	}
 }
 
-func filterHealthyReplica(replicas []common.Replica) []common.Replica {
-	return lo.Filter(replicas, func(replica common.Replica, _ int) bool {
+func filterHealthyReplica(replicas []common.Node) []common.Node {
+	return lo.Filter(replicas, func(replica common.Node, _ int) bool {
 		return replica.Status == common.Healthy
 	})
 }

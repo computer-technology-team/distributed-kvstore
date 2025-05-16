@@ -28,24 +28,32 @@ func (c *Controller) AddPartition(partitionID string) error {
 		return errors.New("no available nodes")
 	}
 
-	for _, p := range c.state.Partitions {
-		if p.Id == partitionID {
-			return errors.New("partition id exist")
-		}
+	if _, exists := c.state.Partitions[partitionID]; exists {
+		return errors.New("partition id exist")
+	}
+
+	if c.state.Partitions == nil {
+		c.state.Partitions = make(map[string]common.Partition)
 	}
 
 	if len(c.state.Partitions) == 0 {
-		c.state.Partitions = append(c.state.Partitions, common.Partition{
+
+		replicas := make([]common.Node, len(c.state.Nodes))
+		for i, node := range c.state.Nodes {
+			node.PartitionID = &partitionID
+			replicas[i] = node
+			node.IsMaster = lo.ToPtr(false)
+		}
+
+		replicas[0].IsMaster = lo.ToPtr(true)
+
+		c.state.Partitions[partitionID] = common.Partition{
 			Id:              partitionID,
-			MasterReplicaId: c.state.Nodes[0].Id,
-			Replicas: lo.Map(c.state.Nodes, func(n common.Node, i int) common.Replica {
-				return common.Replica{
-					Address: n.Address,
-					Id:      n.Id,
-					Status:  n.Status,
-				}
+			MasterReplicaId: replicas[0].Id,
+			Replicas: lo.Map(c.state.Nodes, func(n common.Node, _ int) common.Node {
+				return n
 			}),
-		})
+		}
 		go c.dispatchState()
 		return c.generateVirtualNodesForPartition(partitionID, 3*len(c.state.Nodes))
 	}
@@ -143,15 +151,8 @@ func (c *Controller) RegisterNodeByAddress(address string) (uuid.UUID, error) {
 }
 
 func (c *Controller) generateVirtualNodesForPartition(partitionId string, count int) error {
-	partitionExists := false
-	for _, p := range c.state.Partitions {
-		if p.Id == partitionId {
-			partitionExists = true
-			break
-		}
-	}
-
-	if !partitionExists {
+	_, exists := c.state.Partitions[partitionId]
+	if !exists {
 		return errors.New("partition does not exist")
 	}
 

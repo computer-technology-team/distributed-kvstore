@@ -1,24 +1,29 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Minimal ping API server
+  title: Database API Server
 paths:
-  /ping:
+  /state:
     get:
+      summary: Get the current state of the database node
+      description: Returns the current status and partition ID of the database node
       responses:
         "200":
-          description: ping response
+          description: State information retrieved successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Pong"
+                $ref: "#/components/schemas/NodeState"
 components:
   schemas:
-    Pong:
+    NodeState:
       type: object
       required:
-        - ping
+        - status
       properties:
-        ping:
+        status:
+          $ref: "../common/api.yaml#/components/schemas/Status"
+        partitionId:
           type: string
-          example: pong
+          description: ID of the partition this node belongs to
+          example: "partition-1"

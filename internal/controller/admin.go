@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/computer-technology-team/distributed-kvstore/web"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -146,22 +145,15 @@ func (a *adminServer) PartitionDetail(w http.ResponseWriter, r *http.Request) {
 
 	state := a.controller.GetState()
 
-	var targetPartition *common.Partition
-	for _, p := range state.Partitions {
-		if p.Id == partitionID {
-			targetPartition = &p
-			break
-		}
-	}
-
-	if targetPartition == nil {
+	partition, exists := state.Partitions[partitionID]
+	if !exists {
 		http.Error(w, "Partition not found", http.StatusNotFound)
 		return
 	}
 
 	data := map[string]any{
 		"Title":     "Partition Details",
-		"Partition": targetPartition,
+		"Partition": partition,
 	}
 
 	a.renderTemplate(w, "partition_detail.html", data)

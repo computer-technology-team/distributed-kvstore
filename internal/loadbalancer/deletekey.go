@@ -47,7 +47,7 @@ func (s *server) DeleteKey(ctx context.Context,
 		}, nil
 	}
 
-	client, err := kvstoreAPI.NewClientWithResponses(masterReplica.Address,
+	client, err := kvstoreAPI.NewClientWithResponses("http://"+masterReplica.Address,
 		kvstoreAPI.WithHTTPClient(s.httpClient))
 	if err != nil {
 		slog.ErrorContext(ctx, "could not create client", "method", "delete", "error", err)

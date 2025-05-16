@@ -12,13 +12,18 @@ import (
 	"net/url"
 	"strings"
 
+	externalRef0 "github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/go-chi/chi/v5"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
-// Pong defines model for Pong.
-type Pong struct {
-	Ping string `json:"ping"`
+// NodeState defines model for NodeState.
+type NodeState struct {
+	// PartitionId ID of the partition this node belongs to
+	PartitionId *string `json:"partitionId,omitempty"`
+
+	// Status Current status of a node or replica
+	Status externalRef0.Status `json:"status"`
 }
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
@@ -94,12 +99,12 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// GetPing request
-	GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetState request
+	GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
-func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetPingRequest(c.Server)
+func (c *Client) GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetStateRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -110,8 +115,8 @@ func (c *Client) GetPing(ctx context.Context, reqEditors ...RequestEditorFn) (*h
 	return c.Client.Do(req)
 }
 
-// NewGetPingRequest generates requests for GetPing
-func NewGetPingRequest(server string) (*http.Request, error) {
+// NewGetStateRequest generates requests for GetState
+func NewGetStateRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -119,7 +124,7 @@ func NewGetPingRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/ping")
+	operationPath := fmt.Sprintf("/state")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -180,18 +185,18 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// GetPingWithResponse request
-	GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error)
+	// GetStateWithResponse request
+	GetStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStateResponse, error)
 }
 
-type GetPingResponse struct {
+type GetStateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *Pong
+	JSON200      *NodeState
 }
 
 // Status returns HTTPResponse.Status
-func (r GetPingResponse) Status() string {
+func (r GetStateResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -199,38 +204,38 @@ func (r GetPingResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetPingResponse) StatusCode() int {
+func (r GetStateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-// GetPingWithResponse request returning *GetPingResponse
-func (c *ClientWithResponses) GetPingWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPingResponse, error) {
-	rsp, err := c.GetPing(ctx, reqEditors...)
+// GetStateWithResponse request returning *GetStateResponse
+func (c *ClientWithResponses) GetStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStateResponse, error) {
+	rsp, err := c.GetState(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetPingResponse(rsp)
+	return ParseGetStateResponse(rsp)
 }
 
-// ParseGetPingResponse parses an HTTP response from a GetPingWithResponse call
-func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
+// ParseGetStateResponse parses an HTTP response from a GetStateWithResponse call
+func ParseGetStateResponse(rsp *http.Response) (*GetStateResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetPingResponse{
+	response := &GetStateResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Pong
+		var dest NodeState
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -243,17 +248,18 @@ func ParseGetPingResponse(rsp *http.Response) (*GetPingResponse, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-
-	// (GET /ping)
-	GetPing(w http.ResponseWriter, r *http.Request)
+	// Get the current state of the database node
+	// (GET /state)
+	GetState(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// (GET /ping)
-func (_ Unimplemented) GetPing(w http.ResponseWriter, r *http.Request) {
+// Get the current state of the database node
+// (GET /state)
+func (_ Unimplemented) GetState(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -266,11 +272,11 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetPing operation middleware
-func (siw *ServerInterfaceWrapper) GetPing(w http.ResponseWriter, r *http.Request) {
+// GetState operation middleware
+func (siw *ServerInterfaceWrapper) GetState(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPing(w, r)
+		siw.Handler.GetState(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -394,22 +400,22 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/ping", wrapper.GetPing)
+		r.Get(options.BaseURL+"/state", wrapper.GetState)
 	})
 
 	return r
 }
 
-type GetPingRequestObject struct {
+type GetStateRequestObject struct {
 }
 
-type GetPingResponseObject interface {
-	VisitGetPingResponse(w http.ResponseWriter) error
+type GetStateResponseObject interface {
+	VisitGetStateResponse(w http.ResponseWriter) error
 }
 
-type GetPing200JSONResponse Pong
+type GetState200JSONResponse NodeState
 
-func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWriter) error {
+func (response GetState200JSONResponse) VisitGetStateResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -418,9 +424,9 @@ func (response GetPing200JSONResponse) VisitGetPingResponse(w http.ResponseWrite
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-
-	// (GET /ping)
-	GetPing(ctx context.Context, request GetPingRequestObject) (GetPingResponseObject, error)
+	// Get the current state of the database node
+	// (GET /state)
+	GetState(ctx context.Context, request GetStateRequestObject) (GetStateResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -452,23 +458,23 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// GetPing operation middleware
-func (sh *strictHandler) GetPing(w http.ResponseWriter, r *http.Request) {
-	var request GetPingRequestObject
+// GetState operation middleware
+func (sh *strictHandler) GetState(w http.ResponseWriter, r *http.Request) {
+	var request GetStateRequestObject
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPing(ctx, request.(GetPingRequestObject))
+		return sh.ssi.GetState(ctx, request.(GetStateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPing")
+		handler = middleware(handler, "GetState")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPingResponseObject); ok {
-		if err := validResponse.VisitGetPingResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetStateResponseObject); ok {
+		if err := validResponse.VisitGetStateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

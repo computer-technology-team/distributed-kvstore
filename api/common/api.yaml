@@ -18,9 +18,9 @@ components:
         - unRegisteredNodes
       properties:
         partitions:
-          type: array
-          description: Array of partitions in the distributed key-value store
-          items:
+          type: object
+          description: Map of partitions in the distributed key-value store, keyed by partition ID
+          additionalProperties:
             $ref: "#/components/schemas/Partition"
         virtualNodes:
           type: array
@@ -29,12 +29,12 @@ components:
             $ref: "#/components/schemas/VirtualNode"
         nodes:
           type: array
-          description: Array of nodes used for controller
+          description: Array of active nodes in the cluster
           items:
             $ref: "#/components/schemas/Node"
         unRegisteredNodes:
           type: array
-          description: Array of nodes used for controller
+          description: Array of nodes that have not been fully registered
           items:
             $ref: "#/components/schemas/Node"
     Partition:
@@ -52,7 +52,7 @@ components:
           type: array
           description: List of replicas for this partition
           items:
-            $ref: "#/components/schemas/Replica"
+            $ref: "#/components/schemas/Node"
         masterReplicaId:
           type: string
           format: uuid
@@ -96,6 +96,15 @@ components:
           $ref: "#/components/schemas/Status"
         partitionID:
           type: string
+          description: ID of the partition this node belongs to (if any)
+        replicaID:
+          type: string
+          format: uuid
+          description: ID of the replica this node belongs to (if any)
+        isMaster:
+          type: boolean
+          description: Whether this node is the master for its replica
+          default: false
     VirtualNode:
       type: object
       required:
