@@ -406,6 +406,7 @@ type DeleteKeyResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *KeyResponse
 	JSON404      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -566,6 +567,13 @@ func ParseDeleteKeyResponse(rsp *http.Response) (*DeleteKeyResponse, error) {
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -980,6 +988,18 @@ func (response DeleteKey404JSONResponse) VisitDeleteKeyResponse(w http.ResponseW
 	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteKeydefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response DeleteKeydefaultJSONResponse) VisitDeleteKeyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
 }
 
 type GetValueRequestObject struct {

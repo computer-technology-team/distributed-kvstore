@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Distributed KV Store</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <header>
+        <h1>Distributed KV Store Admin</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/partitions">Partitions</a></li>
+                <li><a href="/nodes">Nodes</a></li>
+                <li><a href="/stats">System Stats</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>{{ .Title }}</h2>
+        <div class="partition-detail">
+            <h3>Partition ID: {{.Partition.Id}}</h3>
+            <p>Status: {{if .Partition.Active}}Active{{else}}Inactive{{end}}</p>
+            
+            <h4>Nodes</h4>
+            <ul>
+                {{range .Partition.Nodes}}
+                <li>{{.Id}} - {{.Address}}</li>
+                {{end}}
+            </ul>
+        </div>
+    </main>
+    <footer>
+        <p>&copy; Distributed KV Store</p>
+    </footer>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

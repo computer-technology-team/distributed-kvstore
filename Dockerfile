@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && apt-key update \
     && apt-get update && apt-get install -y \
-    tzdata wget \
+    tzdata wget curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -3,11 +3,32 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
+
+func logLevelDecodeHookFunc(input, target reflect.Type, data interface{}) (interface{}, error) {
+	if input.Kind() != reflect.String {
+		return data, nil
+	}
+
+	if target.Kind() != reflect.TypeOf(LogLevel{}).Kind() {
+		return data, nil
+	}
+
+	var level slog.Level
+
+	err := level.UnmarshalText([]byte(data.(string)))
+	if err != nil {
+		return nil, fmt.Errorf("error in unmarshalling log level: %w", err)
+	}
+
+	return LogLevel{level}, nil
+}
 
 // FlagConfig defines a mapping between a flag and its viper configuration
 type FlagConfig struct {
@@ -17,28 +38,75 @@ type FlagConfig struct {
 	Usage    string
 }
 
-// Config represents the application configuration
-type Config struct {
-	LogLevel slog.Level `mapstructure:"log_level"`
-	Server   struct {
+// NodeConfig represents the configuration for a node server
+type NodeConfig struct {
+	Host          string `mapstructure:"host"`
+	Port          int    `mapstructure:"port"`
+	ControllerURL string `mapstructure:"controller_url"`
+}
+
+// ClientConfig represents the configuration for a client
+type ClientConfig struct {
+	ServerURL string `mapstructure:"server_url"`
+}
+
+// LoadBalancerConfig represents the configuration for the load balancer
+type LoadBalancerConfig struct {
+	PublicServer struct {
 		Host string `mapstructure:"host"`
 		Port int    `mapstructure:"port"`
-	} `mapstructure:"server"`
-	Client struct {
-		ServerURL string `mapstructure:"server_url"`
-	} `mapstructure:"client"`
+	} `mapstructure:"public_server"`
+	PrivateServer struct {
+		Host string `mapstructure:"host"`
+		Port int    `mapstructure:"port"`
+	} `mapstructure:"private_server"`
+	ControllerURL string `mapstructure:"controller_url"`
+}
+
+// ControllerConfig represents the configuration for the controller
+type ControllerConfig struct {
+	Host    string `mapstructure:"host"`
+	Port    int    `mapstructure:"port"`
+	AdminUI struct {
+		Enabled bool   `mapstructure:"enabled"`
+		Host    string `mapstructure:"host"`
+		Port    int    `mapstructure:"port"`
+	} `mapstructure:"admin_ui"`
+	LoadBalancerURL string `mapstructure:"load_balancer_url"`
+}
+
+type LogLevel struct {
+	Level slog.Level
+}
+
+// Config represents the application configuration
+type Config struct {
+	LogLevel     LogLevel           `mapstructure:"log_level"`
+	Node         NodeConfig         `mapstructure:"node"`
+	Client       ClientConfig       `mapstructure:"client"`
+	Controller   ControllerConfig   `mapstructure:"controller"`
+	LoadBalancer LoadBalancerConfig `mapstructure:"load_balancer"`
 }
 
 // ConfigFlags defines all the configuration flags for the application
 var ConfigFlags = []FlagConfig{
 	{"log-level", "log_level", slog.LevelInfo, "Log level (debug, info, warn, error)"},
-	{"server.host", "server.host", "localhost", "Server host"},
-	{"server.port", "server.port", 8080, "Server port"},
+	{"node.host", "node.host", "localhost", "Node server host"},
+	{"node.port", "node.port", 8080, "Node server port"},
 	{"client.server-url", "client.server_url", "", "KVStore server URL for client commands"},
+	{"controller.host", "controller.host", "localhost", "Controller host"},
+	{"controller.port", "controller.port", 9090, "Controller port"},
+	{"controller.admin-ui.enabled", "controller.admin_ui.enabled", true, "Enable admin UI"},
+	{"controller.admin-ui.host", "controller.admin_ui.host", "localhost", "Admin UI host"},
+	{"controller.admin-ui.port", "controller.admin_ui.port", 9091, "Admin UI port"},
+	{"load-balancer.public-server.host", "load_balancer.public_server.host", "localhost", "Load balancer public server host"},
+	{"load-balancer.public-server.port", "load_balancer.public_server.port", 8000, "Load balancer public server port"},
+	{"load-balancer.private-server.host", "load_balancer.private_server.host", "localhost", "Load balancer private server host"},
+	{"load-balancer.private-server.port", "load_balancer.private_server.port", 8001, "Load balancer private server port"},
 }
 
-// InitViper initializes a new Viper instance with default settings
-func InitViper(configFile string) *viper.Viper {
+// initViper initializes a new Viper instance with default settings
+func initViper(configFile string) *viper.Viper {
 	v := viper.New()
 
 	// Set up config file settings
@@ -69,58 +137,41 @@ func InitViper(configFile string) *viper.Viper {
 // AddFlags adds configuration flags to the given cobra command
 func AddFlags(cmd *cobra.Command) {
 	// Add config file flag
-	cmd.Flags().String("config", "", "Config file path")
+	cmd.PersistentFlags().String("config", "", "Config file path")
 
 	// Add flags for all configuration options using the global ConfigFlags
 	for _, fc := range ConfigFlags {
 		switch v := fc.Default.(type) {
 		case string:
-			cmd.Flags().String(fc.FlagName, v, fc.Usage)
+			cmd.PersistentFlags().String(fc.FlagName, v, fc.Usage)
 		case int:
-			cmd.Flags().Int(fc.FlagName, v, fc.Usage)
+			cmd.PersistentFlags().Int(fc.FlagName, v, fc.Usage)
 		case bool:
-			cmd.Flags().Bool(fc.FlagName, v, fc.Usage)
+			cmd.PersistentFlags().Bool(fc.FlagName, v, fc.Usage)
 		case float64:
-			cmd.Flags().Float64(fc.FlagName, v, fc.Usage)
+			cmd.PersistentFlags().Float64(fc.FlagName, v, fc.Usage)
+		case slog.Level:
+			cmd.PersistentFlags().String(fc.FlagName, v.String(), fc.Usage)
 		default:
 			slog.Error("invalid value type", "value", v)
 		}
 	}
 }
 
-// BindFlags binds cobra flags to viper configuration
-func BindFlags(cmd *cobra.Command, v *viper.Viper) {
-	// Bind flags to viper keys
-	for _, fc := range ConfigFlags {
-		flag := cmd.Flags().Lookup(fc.FlagName)
-		if flag != nil {
-			v.BindPFlag(fc.ViperKey, flag)
-		}
-	}
-}
-
-// LoadConfig loads the configuration from all sources and returns a Config struct
-func LoadConfig(cmd *cobra.Command) (*Config, error) {
-	// Initialize viper
-
-	var configFile string
-	// Check if config file is specified via flag
-	if cmd != nil && cmd.Flag("config") != nil && cmd.Flag("config").Changed {
-		tmpConfigFile := cmd.Flag("config").Value.String()
-		if tmpConfigFile != "" {
-			configFile = tmpConfigFile
-		}
+func LoadConfig(flags *pflag.FlagSet) (*Config, error) {
+	configFile, err := flags.GetString("config")
+	if err != nil {
+		return nil, fmt.Errorf("could not get config flag value: %w", err)
 	}
 
-	v := InitViper(configFile)
+	v := initViper(configFile)
 
-	// Add flags to the command if provided
-	if cmd != nil {
-		AddFlags(cmd)
-		BindFlags(cmd, v)
+	err = v.BindPFlags(flags)
+	if err != nil {
+		slog.Error("could not bind flags", "error", err)
+		return nil, fmt.Errorf("could not bind flags to viper: %w", err)
 	}
 
-	// Try to read config file
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
@@ -134,7 +185,7 @@ func LoadConfig(cmd *cobra.Command) (*Config, error) {
 	var config Config
 
 	// Apply the configuration to our struct
-	if err := v.Unmarshal(&config); err != nil {
+	if err := v.Unmarshal(&config, viper.DecodeHook(logLevelDecodeHookFunc)); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 

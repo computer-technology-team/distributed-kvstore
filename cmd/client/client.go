@@ -15,7 +15,7 @@ func NewClientCmd() *cobra.Command {
 		Short: "Interact with the KVStore",
 		Long:  "This command allows you to interact with the KVStore. You can set, get, delete, and check the existence of keys.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadConfig(nil)
+			cfg, err := config.LoadConfig(cmd.Flags())
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

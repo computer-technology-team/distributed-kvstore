@@ -1,0 +1,31 @@
+openapi: "3.0.0"
+info:
+  version: 1.0.0
+  title: Loadbalancer API
+paths:
+  /state:
+    put:
+      operationId: setState
+      summary: Sets the loadbalancer state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "../common/api.yaml#/components/schemas/State"
+      responses:
+        "200":
+          description: State successfully updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StateResponse"
+components:
+  schemas:
+    StateResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Optional message providing additional information
+          example: "State updated successfully"

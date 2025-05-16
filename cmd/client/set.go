@@ -19,7 +19,7 @@ func NewSetCmd() *cobra.Command {
 			ctx := cmd.Context()
 			key, value := args[0], args[1]
 
-			cfg, err := config.LoadConfig(cmd)
+			cfg, err := config.LoadConfig(cmd.Flags())
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

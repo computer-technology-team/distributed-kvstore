@@ -1,0 +1,50 @@
+version: "3.8"
+services:
+  loadbalancer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: always
+    network_mode: host
+    command: ["./kvstore", "servebalancer", "--config", "/app/config.yaml"]
+    volumes:
+      - ./config/loadbalancer.yaml:/app/config.yaml
+    restart: unless-stopped
+    environment:
+      - DIST_KV_LOG_LEVEL=info
+      - DIST_KV_LOAD_BALANCER__PUBLIC_SERVER__HOST=0.0.0.0
+      - DIST_KV_LOAD_BALANCER__PUBLIC_SERVER__PORT=8000
+      - DIST_KV_LOAD_BALANCER__PRIVATE_SERVER__HOST=0.0.0.0
+      - DIST_KV_LOAD_BALANCER__PRIVATE_SERVER__PORT=8001
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      controller:
+        condition: service_healthy
+  controller:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: always
+    network_mode: host
+    command: ["./kvstore", "controller", "--config", "/app/config.yaml"]
+    volumes:
+      - ./config/controller.yaml:/app/config.yaml
+    restart: unless-stopped
+    environment:
+      - DIST_KV_LOG_LEVEL=info
+      - DIST_KV_CONTROLLER__HOST=0.0.0.0
+      - DIST_KV_CONTROLLER__PORT=9090
+      - DIST_KV_CONTROLLER__ADMIN_UI__ENABLED=true
+      - DIST_KV_CONTROLLER__ADMIN_UI__HOST=0.0.0.0
+      - DIST_KV_CONTROLLER__ADMIN_UI__PORT=9091
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

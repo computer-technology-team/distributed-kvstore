@@ -1,0 +1,9 @@
+log_level: info
+load_balancer:
+  controller_url: http://localhost:9090
+  public_server:
+    host: 0.0.0.0
+    port: 8000
+  private_server:
+    host: 0.0.0.0
+    port: 8001

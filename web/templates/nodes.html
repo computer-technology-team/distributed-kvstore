@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} - Distributed KV Store</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <header>
+        <h1>Distributed KV Store Admin</h1>
+        <nav>
+            <ul>
+                <li><a href="/">Dashboard</a></li>
+                <li><a href="/partitions">Partitions</a></li>
+                <li><a href="/nodes">Nodes</a></li>
+                <li><a href="/stats">System Stats</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>{{ .Title }}</h2>
+        
+
+        <div class="nodes-list">
+            <h3>Current Nodes</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Nodes}}
+                    <tr>
+                        <td>{{.Id}}</td>
+                        <td>{{.Address}}</td>
+                        <td>{{.Status}}</td>
+                        <td>
+                            <form action="/nodes/remove" method="POST" class="inline-form">
+                                <input type="hidden" name="node_id" value="{{.Id}}">
+                                <button type="submit" class="btn-small btn-danger">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="nodes-list">
+            <h3>Unregistered Nodes</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .UnRegisteredNodes}}
+                    <tr>
+                        <td>{{.Id}}</td>
+                        <td>{{.Address}}</td>
+                        <td>{{.Status}}</td>
+                        <td>
+                            <form action="/nodes/add" method="POST" class="inline-form">
+                                <input type="hidden" name="unregistered_node_id" value="{{.Id}}">
+                                <button type="submit" class="btn-small btn-success">Register</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+    </main>
+    <footer>
+        <p>&copy; Distributed KV Store</p>
+    </footer>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
