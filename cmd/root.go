@@ -25,7 +25,7 @@ func NewRootCmd() *cobra.Command {
 			}
 
 			logHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-				Level: cfg.LogLevel,
+				Level: cfg.LogLevel.Level,
 			})
 			slog.SetDefault(slog.New(logHandler))
 			slog.Info("Configuration loaded successfully")
@@ -44,8 +44,10 @@ func NewRootCmd() *cobra.Command {
 	clientCmd := client.NewClientCmd()
 
 	serveNodeCmd := NewServeNodeCmd()
+	serveLoadBalancerCmd := NewServeLoadBalancerCmd()
 
-	rootCmd.AddCommand(versionCmd, toolsCmd, clientCmd, serveNodeCmd)
+	// controllerCmd := NewControllerCmd()
+	rootCmd.AddCommand(versionCmd, toolsCmd, clientCmd, serveNodeCmd, serveLoadBalancerCmd)
 
 	return rootCmd
 }
