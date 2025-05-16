@@ -30,9 +30,6 @@ type Node struct {
 	// PartitionID ID of the partition this node belongs to (if any)
 	PartitionID *string `json:"partitionID,omitempty"`
 
-	// ReplicaID ID of the replica this node belongs to (if any)
-	ReplicaID *openapi_types.UUID `json:"replicaID,omitempty"`
-
 	// Status Current status of a node or replica
 	Status Status `json:"status"`
 }
@@ -45,8 +42,8 @@ type Partition struct {
 	// MasterReplicaId ID of the replica that is currently the master for this partition
 	MasterReplicaId openapi_types.UUID `json:"masterReplicaId"`
 
-	// Replicas List of replicas for this partition
-	Replicas []Node `json:"replicas"`
+	// ReplicaIds List of replica IDs for this partition
+	ReplicaIds []openapi_types.UUID `json:"replicaIds"`
 }
 
 // Replica defines model for Replica.

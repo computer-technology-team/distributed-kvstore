@@ -7,18 +7,27 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/common"
+	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	"github.com/computer-technology-team/distributed-kvstore/api/loadbalancer"
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/samber/lo"
 )
 
+var startWorkerOnce sync.Once
+
 type Controller struct {
-	balancerClient loadbalancer.ClientWithResponsesInterface
-	state          common.State
-	lock           sync.RWMutex
+	balancerClient      loadbalancer.ClientWithResponsesInterface
+	state               common.State
+	lock                sync.RWMutex
+	startTime           time.Time
+	healthCheckInterval time.Duration
+	healthCheckTimeout  time.Duration
+	ticker              *time.Ticker
+	stopWorker          chan int
 }
 
 func (c *Controller) AddPartition(partitionID string) error {
@@ -37,22 +46,27 @@ func (c *Controller) AddPartition(partitionID string) error {
 	}
 
 	if len(c.state.Partitions) == 0 {
-
-		replicas := make([]common.Node, len(c.state.Nodes))
-		for i, node := range c.state.Nodes {
-			node.PartitionID = &partitionID
-			replicas[i] = node
-			node.IsMaster = lo.ToPtr(false)
+		// Update nodes with partition information
+		for i := range c.state.Nodes {
+			c.state.Nodes[i].PartitionID = &partitionID
+			c.state.Nodes[i].IsMaster = lo.ToPtr(false)
+			// Generate replica IDs for each node
+			replicaID := openapi_types.UUID(uuid.New())
+			c.state.Nodes[i].ReplicaID = &replicaID
 		}
 
-		replicas[0].IsMaster = lo.ToPtr(true)
+		// Set the first node as master
+		c.state.Nodes[0].IsMaster = lo.ToPtr(true)
+
+		// Extract replica IDs from nodes
+		replicaIds := make([]openapi_types.UUID, len(c.state.Nodes))
+		for i, node := range c.state.Nodes {
+			replicaIds[i] = node.Id
+		}
 
 		c.state.Partitions[partitionID] = common.Partition{
 			Id:              partitionID,
-			MasterReplicaId: replicas[0].Id,
-			Replicas: lo.Map(c.state.Nodes, func(n common.Node, _ int) common.Node {
-				return n
-			}),
+			MasterReplicaId: c.state.Nodes[0].Id,
 		}
 		go c.dispatchState()
 		return c.generateVirtualNodesForPartition(partitionID, 3*len(c.state.Nodes))
@@ -92,6 +106,10 @@ func (c *Controller) GetState() common.State {
 	return c.state
 }
 
+func (c *Controller) GetUptime() time.Duration {
+	return time.Since(c.startTime)
+}
+
 func (c *Controller) RegisterNode(nodeID string) (uuid.UUID, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -123,6 +141,61 @@ func (c *Controller) RegisterNode(nodeID string) (uuid.UUID, error) {
 	c.state.UnRegisteredNodes = slices.Delete(c.state.UnRegisteredNodes, idx, idx+1)
 
 	return uuid.UUID(registeredNode.Id), nil
+}
+func (c *Controller) StartWatcher() {
+	startWorkerOnce.Do(c.startWorker)
+}
+
+func (c *Controller) startWorker() {
+	c.ticker = time.NewTicker(5 * time.Second)
+	for {
+		select {
+		case <-c.ticker.C:
+			c.checkNodes()
+		case <-c.stopWorker:
+			return
+		}
+	}
+}
+
+func (c *Controller) checkNodes() {
+	for _, node := range c.state.Nodes {
+		c.checkNode(&node)
+	}
+}
+
+func (c *Controller) checkNode(node *common.Node) {
+	client, err := database.NewClientWithResponses("http://" + node.Address)
+	if err != nil {
+		node.Status = common.Unhealthy
+		slog.Error("could not initalize database client", "error", err,
+			"node_address", node.Address)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), c.healthCheckTimeout)
+	defer cancel()
+
+	resp, err := client.GetStateWithResponse(ctx)
+	if err != nil {
+		node.Status = common.Unhealthy
+		slog.Error("could not get state", "node_address", node.Address, "error", err)
+		return
+	}
+
+	if resp.StatusCode() != 200 {
+		node.Status = common.Unhealthy
+		slog.Error("state response non 200",
+			"node_address", node.Address, "status_code", resp.StatusCode())
+		return
+	}
+
+	node.Status = common.Healthy
+}
+
+func (c *Controller) StopWatcher() {
+	c.ticker.Stop()
+	close(c.stopWorker)
 }
 
 // RegisterNodeByAddress registers a new node by its address
@@ -186,8 +259,12 @@ func (c *Controller) dispatchState() {
 	}
 }
 
-func NewController(balancerClient loadbalancer.ClientWithResponsesInterface) *Controller {
+func NewController(healthCheckInterval time.Duration, healthCheckTimeout time.Duration, balancerClient loadbalancer.ClientWithResponsesInterface) *Controller {
 	return &Controller{
-		balancerClient: balancerClient,
+		balancerClient:      balancerClient,
+		startTime:           time.Now(),
+		healthCheckInterval: healthCheckInterval,
+		healthCheckTimeout:  healthCheckTimeout,
+		stopWorker:          make(chan int),
 	}
 }

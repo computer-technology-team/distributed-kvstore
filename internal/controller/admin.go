@@ -315,7 +315,7 @@ func (a *adminServer) RemoveNode(w http.ResponseWriter, r *http.Request) {
 func (a *adminServer) SystemStats(w http.ResponseWriter, r *http.Request) {
 	stats := map[string]any{
 		"TotalRequests": 0,
-		"Uptime":        "0h 0m 0s",
+		"Uptime":        a.controller.GetUptime().String(),
 		// Add more stats as needed
 	}
 

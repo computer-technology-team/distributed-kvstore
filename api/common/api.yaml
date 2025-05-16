@@ -41,18 +41,21 @@ components:
       type: object
       required:
         - id
-        - replicas
+        - replicaIds
         - masterReplicaId
       properties:
         id:
           type: string
           description: Unique identifier for the partition
           example: "partition-1"
-        replicas:
+        replicaIds:
           type: array
-          description: List of replicas for this partition
+          description: List of replica IDs for this partition
           items:
-            $ref: "#/components/schemas/Node"
+            type: string
+            format: uuid
+            description: Unique identifier for a replica
+            example: "123e4567-e89b-12d3-a456-426614174000"
         masterReplicaId:
           type: string
           format: uuid
@@ -97,10 +100,6 @@ components:
         partitionID:
           type: string
           description: ID of the partition this node belongs to (if any)
-        replicaID:
-          type: string
-          format: uuid
-          description: ID of the replica this node belongs to (if any)
         isMaster:
           type: boolean
           description: Whether this node is the master for its replica

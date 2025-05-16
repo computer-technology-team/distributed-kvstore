@@ -24,7 +24,7 @@ func (s *server) SetValue(ctx context.Context,
 		}, nil
 	}
 
-	masterReplica, found := lo.Find(partition.Replicas, replicaPredicate(partition))
+	masterReplica, found := lo.Find(s.statePtr.Load().Nodes, replicaPredicate(partition.MasterReplicaId))
 	if !found {
 		slog.ErrorContext(ctx, "master replica not found", "method", "set",
 			"partition_id", partition.Id)

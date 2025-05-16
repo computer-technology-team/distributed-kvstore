@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -72,7 +73,9 @@ type ControllerConfig struct {
 		Host    string `mapstructure:"host"`
 		Port    int    `mapstructure:"port"`
 	} `mapstructure:"admin_ui"`
-	LoadBalancerURL string `mapstructure:"load_balancer_url"`
+	LoadBalancerURL     string        `mapstructure:"load_balancer_url"`
+	HealthCheckDuration time.Duration `mapstructure:"health_check_duration"`
+	HealthCheckTimeout  time.Duration `mapstructure:"health_check_timeout"`
 }
 
 type LogLevel struct {
@@ -99,6 +102,9 @@ var ConfigFlags = []FlagConfig{
 	{"controller.admin-ui.enabled", "controller.admin_ui.enabled", true, "Enable admin UI"},
 	{"controller.admin-ui.host", "controller.admin_ui.host", "localhost", "Admin UI host"},
 	{"controller.admin-ui.port", "controller.admin_ui.port", 9091, "Admin UI port"},
+	{"controller.load_balancer_url", "controller.load_balancer_url", "http://localhost:8001", "Load Balancer URL"},
+	{"controller.health_check_duration", "controller.health_check_duration", time.Second * 5, "Health Check Duration"},
+	{"controller.health_check_timeout", "controller.health_check_timeout", time.Second * 2, "Health Check Timeout"},
 	{"load-balancer.public-server.host", "load_balancer.public_server.host", "localhost", "Load balancer public server host"},
 	{"load-balancer.public-server.port", "load_balancer.public_server.port", 8000, "Load balancer public server port"},
 	{"load-balancer.private-server.host", "load_balancer.private_server.host", "localhost", "Load balancer private server host"},

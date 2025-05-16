@@ -38,7 +38,8 @@ func NewControllerCmd() *cobra.Command {
 				return fmt.Errorf("failed to create balancer client: %w", err)
 			}
 
-			ctrl := controller.NewController(balancerClient)
+			ctrl := controller.NewController(cfg.Controller.HealthCheckDuration, cfg.Controller.HealthCheckTimeout,
+				balancerClient)
 
 			controllerAddr := fmt.Sprintf("%s:%d", cfg.Controller.Host, cfg.Controller.Port)
 			controllerListener, err := net.Listen("tcp", controllerAddr)
@@ -97,6 +98,8 @@ func NewControllerCmd() *cobra.Command {
 				}
 			}()
 
+			ctrl.StartWatcher()
+
 			stop := make(chan os.Signal, 1)
 			signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -117,6 +120,8 @@ func NewControllerCmd() *cobra.Command {
 					slog.Error("Private server shutdown error", "error", err)
 				}
 			}
+
+			ctrl.StopWatcher()
 
 			wg.Wait()
 			slog.Info("Servers gracefully stopped")

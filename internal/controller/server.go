@@ -32,5 +32,7 @@ func (s *server) GetState(ctx context.Context, request controller.GetStateReques
 }
 
 func NewServer(controller *Controller) controller.StrictServerInterface {
-	return &server{controller: controller}
+	return &server{
+		controller: controller,
+	}
 }
