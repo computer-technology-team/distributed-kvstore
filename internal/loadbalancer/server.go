@@ -51,9 +51,9 @@ func NewServer(ctx context.Context, controllerClient controller.ClientWithRespon
 	return srv, nil
 }
 
-func replicaPredicate(replicaId openapi_types.UUID) func(common.Node) bool {
+func replicaPredicate(id openapi_types.UUID) func(common.Node) bool {
 	return func(node common.Node) bool {
-		return node.ReplicaID != nil && *node.ReplicaID == replicaId
+		return node.Id == id
 	}
 }
 
@@ -63,10 +63,10 @@ func balanceReplicaIter(replicaIds []openapi_types.UUID, nodes []common.Node) it
 		for i := range len(replicaIds) {
 			replicaIdx := (i + selectedReplicaIdx) % len(replicaIds)
 			replicaId := replicaIds[replicaIdx]
-			
+
 			// Find the node with this replica ID
 			for _, node := range nodes {
-				if node.ReplicaID != nil && *node.ReplicaID == replicaId && node.Status == common.Healthy {
+				if node.Id == replicaId && node.Status == common.Healthy {
 					if !yield(node) {
 						return
 					}
@@ -79,16 +79,16 @@ func balanceReplicaIter(replicaIds []openapi_types.UUID, nodes []common.Node) it
 
 func getNodesForReplicaIds(replicaIds []openapi_types.UUID, nodes []common.Node) []common.Node {
 	result := make([]common.Node, 0, len(replicaIds))
-	
+
 	for _, replicaId := range replicaIds {
 		for _, node := range nodes {
-			if node.ReplicaID != nil && *node.ReplicaID == replicaId {
+			if node.Id == replicaId {
 				result = append(result, node)
 				break
 			}
 		}
 	}
-	
+
 	return result
 }
 

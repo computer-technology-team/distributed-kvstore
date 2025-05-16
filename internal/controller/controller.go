@@ -50,9 +50,6 @@ func (c *Controller) AddPartition(partitionID string) error {
 		for i := range c.state.Nodes {
 			c.state.Nodes[i].PartitionID = &partitionID
 			c.state.Nodes[i].IsMaster = lo.ToPtr(false)
-			// Generate replica IDs for each node
-			replicaID := openapi_types.UUID(uuid.New())
-			c.state.Nodes[i].ReplicaID = &replicaID
 		}
 
 		// Set the first node as master
