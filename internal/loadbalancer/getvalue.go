@@ -30,7 +30,7 @@ func (s *server) GetValue(ctx context.Context,
 	replicaNodes := lo.Filter(s.statePtr.Load().Nodes, func(node common.Node, _ int) bool {
 		return node.PartitionID != nil && *node.PartitionID == partition.Id
 	})
-	
+
 	// Filter healthy replicas
 	healthyReplicas := lo.Filter(replicaNodes, func(node common.Node, _ int) bool {
 		return node.Status == common.Healthy
@@ -48,8 +48,8 @@ func (s *server) GetValue(ctx context.Context,
 	// Use the existing replicas directly
 	selectedReplicaIdx := rand.IntN(len(healthyReplicas))
 	replica := healthyReplicas[selectedReplicaIdx]
-	
-	client, err := kvstoreAPI.NewClientWithResponses("http://" + replica.Address,
+
+	client, err := kvstoreAPI.NewClientWithResponses("http://"+replica.Address,
 		kvstoreAPI.WithHTTPClient(s.httpClient))
 	if err != nil {
 		slog.ErrorContext(ctx, "could not create client", "method", "get", "error", err)
@@ -60,7 +60,7 @@ func (s *server) GetValue(ctx context.Context,
 			StatusCode: http.StatusInternalServerError,
 		}, nil
 	}
-	
+
 	resp, err := client.GetValueWithResponse(ctx, request.Key)
 	if err != nil {
 		slog.ErrorContext(ctx, "error getting value from replica",
