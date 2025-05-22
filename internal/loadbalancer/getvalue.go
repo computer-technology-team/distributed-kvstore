@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/common"
+	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	kvstoreAPI "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
 	"github.com/samber/lo"
 )
@@ -28,12 +29,17 @@ func (s *server) GetValue(ctx context.Context,
 
 	// Find nodes that are replicas for this partition
 	replicaNodes := lo.Filter(s.statePtr.Load().Nodes, func(node common.Node, _ int) bool {
-		return node.PartitionID != nil && *node.PartitionID == partition.Id
+		if node.Partitions == nil {
+			return false
+		}
+		_, hasPartition := (*node.Partitions)[partition.Id]
+		return hasPartition
 	})
 
 	// Filter healthy replicas
 	healthyReplicas := lo.Filter(replicaNodes, func(node common.Node, _ int) bool {
-		return node.Status == common.Healthy
+		partitionRole, exists := (*node.Partitions)[partition.Id]
+		return exists && partitionRole.Status == common.Healthy
 	})
 
 	if len(healthyReplicas) == 0 {
@@ -49,8 +55,8 @@ func (s *server) GetValue(ctx context.Context,
 	selectedReplicaIdx := rand.IntN(len(healthyReplicas))
 	replica := healthyReplicas[selectedReplicaIdx]
 
-	client, err := kvstoreAPI.NewClientWithResponses("http://"+replica.Address,
-		kvstoreAPI.WithHTTPClient(s.httpClient))
+	client, err := database.NewClientWithResponses("http://"+replica.Address,
+		database.WithHTTPClient(s.httpClient))
 	if err != nil {
 		slog.ErrorContext(ctx, "could not create client", "method", "get", "error", err)
 		return kvstoreAPI.GetValuedefaultJSONResponse{
@@ -61,7 +67,7 @@ func (s *server) GetValue(ctx context.Context,
 		}, nil
 	}
 
-	resp, err := client.GetValueWithResponse(ctx, request.Key)
+	resp, err := client.GetValueFromPartitionWithResponse(ctx, partition.Id, request.Key)
 	if err != nil {
 		slog.ErrorContext(ctx, "error getting value from replica",
 			"method", "get", "error", err)
@@ -78,9 +84,12 @@ func (s *server) GetValue(ctx context.Context,
 		return kvstoreAPI.GetValue200JSONResponse(*resp.JSON200), nil
 	case resp.JSON404 != nil:
 		return kvstoreAPI.GetValue404JSONResponse(*resp.JSON404), nil
-	default:
+	case resp.JSONDefault != nil:
 		slog.ErrorContext(ctx, "unexpected error in getting value from replica",
 			"method", "get", "error", resp.JSONDefault.Error, "replica_id", replica.Id)
+	default:
+		slog.ErrorContext(ctx, "unexpected error in getting value from replica",
+			"method", "get", "replica_id", replica.Id)
 	}
 
 	return kvstoreAPI.GetValuedefaultJSONResponse{

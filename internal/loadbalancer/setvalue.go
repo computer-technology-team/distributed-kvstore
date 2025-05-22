@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/common"
+	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	kvstoreAPI "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
 	"github.com/samber/lo"
 )
@@ -24,31 +25,58 @@ func (s *server) SetValue(ctx context.Context,
 		}, nil
 	}
 
-	masterReplica, found := lo.Find(s.statePtr.Load().Nodes, replicaPredicate(partition.MasterReplicaId))
+	masterReplica, found := lo.Find(s.statePtr.Load().Nodes, func(node common.Node) bool {
+		return node.Id == partition.MasterNodeId
+	})
+
 	if !found {
-		slog.ErrorContext(ctx, "master replica not found", "method", "set",
+		slog.ErrorContext(ctx, "master node not found", "method", "set",
 			"partition_id", partition.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
 			Body: kvstoreAPI.ErrorResponse{
-				Error: "master replica not found",
+				Error: "master node not found",
 			},
 			StatusCode: http.StatusInternalServerError,
 		}, nil
 	}
 
-	if masterReplica.Status != common.Healthy {
-		slog.ErrorContext(ctx, "master replica not healthy", "method", "set",
-			"partition_id", partition.Id, "replica_id", masterReplica.Id)
+	// Check if the node has this partition and it's healthy
+	if masterReplica.Partitions == nil {
+		slog.ErrorContext(ctx, "master node has no partitions", "method", "set",
+			"partition_id", partition.Id, "node_id", masterReplica.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
 			Body: kvstoreAPI.ErrorResponse{
-				Error: "master replica not healthy",
+				Error: "master node has no partitions",
+			},
+			StatusCode: http.StatusInternalServerError,
+		}, nil
+	}
+
+	partitionRole, exists := (*masterReplica.Partitions)[partition.Id]
+	if !exists || !partitionRole.IsMaster {
+		slog.ErrorContext(ctx, "node is not master for this partition", "method", "set",
+			"partition_id", partition.Id, "node_id", masterReplica.Id)
+		return kvstoreAPI.SetValuedefaultJSONResponse{
+			Body: kvstoreAPI.ErrorResponse{
+				Error: "node is not master for this partition",
+			},
+			StatusCode: http.StatusInternalServerError,
+		}, nil
+	}
+
+	if partitionRole.Status != common.Healthy {
+		slog.ErrorContext(ctx, "master partition not healthy", "method", "set",
+			"partition_id", partition.Id, "node_id", masterReplica.Id)
+		return kvstoreAPI.SetValuedefaultJSONResponse{
+			Body: kvstoreAPI.ErrorResponse{
+				Error: "master partition not healthy",
 			},
 			StatusCode: http.StatusServiceUnavailable,
 		}, nil
 	}
 
-	client, err := kvstoreAPI.NewClientWithResponses("http://" + masterReplica.Address,
-		kvstoreAPI.WithHTTPClient(s.httpClient))
+	client, err := database.NewClientWithResponses("http://"+masterReplica.Address,
+		database.WithHTTPClient(s.httpClient))
 	if err != nil {
 		slog.ErrorContext(ctx, "could not create client", "method", "set", "error", err)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
@@ -59,7 +87,13 @@ func (s *server) SetValue(ctx context.Context,
 		}, nil
 	}
 
-	resp, err := client.SetValueWithResponse(ctx, request.Key, *request.Body)
+	// Create the database request body
+	dbRequestBody := database.SetRequest{
+		Value: request.Body.Value,
+	}
+
+	// Call the database API to set the value in the partition
+	resp, err := client.SetValueInPartitionWithResponse(ctx, partition.Id, request.Key, dbRequestBody)
 	if err != nil {
 		slog.ErrorContext(ctx, "error in set value", "method", "set", "error", err)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
