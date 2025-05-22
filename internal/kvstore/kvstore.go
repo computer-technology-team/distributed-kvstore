@@ -17,6 +17,8 @@ type KVStore struct {
 	store     map[string]string // Regular map for key-value pairs
 	isMaster  bool              // Whether this node is the master for this partition
 	isSyncing bool              // Whether this partition is currently syncing
+	opLog     []kvstoreAPI.Operation
+	nextOpID  int64
 }
 
 // NodeStore manages multiple KVStores for different partitions

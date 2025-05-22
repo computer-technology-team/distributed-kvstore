@@ -3,18 +3,20 @@ package node
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	internalKVStore "github.com/computer-technology-team/distributed-kvstore/internal/kvstore"
 	"github.com/google/uuid"
 	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime/types"
-	"log/slog"
 )
 
 type server struct {
-	kvStore *internalKVStore.NodeStore
-	id      uuid.UUID
+	kvStore    *internalKVStore.NodeStore
+	id         uuid.UUID
+	cancelSync context.CancelFunc
 }
 
 func NewServer(id types.UUID) database.StrictServerInterface {
@@ -112,4 +114,93 @@ func (s *server) DeleteKeyFromPartition(ctx context.Context, request database.De
 	return database.DeleteKeyFromPartition200JSONResponse{
 		Key: key,
 	}, nil
+}
+
+func (s *server) GetOperation(ctx context.Context, request kvstoreAPI.GetOperationRequestObject) (kvstoreAPI.GetOperationResponseObject, error) {
+	op, exists := s.kvStore.GetOperation(request.OpId)
+	if !exists {
+		return kvstoreAPI.GetOperation404JSONResponse{}, nil
+	}
+
+	return kvstoreAPI.GetOperation200JSONResponse{
+		Id:    op.Id,
+		Type:  op.Type,
+		Key:   op.Key,
+		Value: op.Value,
+	}, nil
+}
+
+func (s *server) SyncOperations(ctx context.Context, request kvstoreAPI.SyncOperationsRequestObject) (kvstoreAPI.SyncOperationsResponseObject, error) {
+	ops := s.kvStore.GetOperationsAfter(request.LastOpId)
+	return kvstoreAPI.SyncOperations200JSONResponse(ops), nil
+}
+
+func (s *server) startBackgroundSync() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancelSync = cancel
+
+	go func() {
+		ticker := time.NewTicker(s.kvStore.SyncInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				s.syncWithMaster()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+func (s *server) Stop() {
+	if s.cancelSync != nil {
+		s.cancelSync()
+	}
+}
+
+func (s *server) syncWithMaster() {
+	lastOpID := s.kvStore.GetLastSyncedOpID()
+
+	// Get operations from master
+	client, err := kvstoreAPI.NewClientWithResponses(s.kvStore.MasterAddr)
+	if err != nil {
+		slog.Info("Failed to create client for master: %v", err)
+		return
+	}
+
+	resp, err := client.SyncOperationsWithResponse(context.Background(), lastOpID)
+	if err != nil {
+		slog.Info("Failed to sync operations: %v", err)
+		return
+	}
+
+	if resp.JSON200 != nil {
+		s.applyOperations(*resp.JSON200)
+	}
+}
+
+func (s *server) applyOperations(ops []kvstoreAPI.Operation) {
+	s.kvStore.mu.Lock()
+	defer s.kvStore.mu.Unlock()
+
+	for _, op := range ops {
+		switch op.Type {
+		case "set":
+			s.kvStore.store[op.Key] = op.Value
+		case "delete":
+			delete(s.kvStore.store, op.Key)
+		}
+
+		// Update operation log
+		s.kvStore.opLog = append(s.kvStore.opLog, Operation{
+			ID:    op.Id,
+			Type:  OperationType(op.Type),
+			Key:   op.Key,
+			Value: op.Value,
+		})
+
+		s.kvStore.lastSyncedOpID = op.Id
+	}
 }

@@ -19,6 +19,54 @@ import (
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
+<<<<<<< HEAD
+=======
+// Defines values for OperationType.
+const (
+	Delete OperationType = "delete"
+	Set    OperationType = "set"
+)
+
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	// Error Error message
+	Error string `json:"error"`
+}
+
+// KeyResponse defines model for KeyResponse.
+type KeyResponse struct {
+	// Key The key that was operated on
+	Key string `json:"key"`
+}
+
+// KeyValueResponse defines model for KeyValueResponse.
+type KeyValueResponse struct {
+	// Key The key
+	Key string `json:"key"`
+
+	// Value The value associated with the key
+	Value string `json:"value"`
+}
+
+// Operation defines model for Operation.
+type Operation struct {
+	// Id Unique operation ID
+	Id int64 `json:"id"`
+
+	// Key Key affected by the operation
+	Key string `json:"key"`
+
+	// Type Type of operation
+	Type OperationType `json:"type"`
+
+	// Value Value for set operations (optional for delete)
+	Value *string `json:"value,omitempty"`
+}
+
+// OperationType Type of operation
+type OperationType string
+
+>>>>>>> ad595f5 (feat: replication)
 // Pong defines model for Pong.
 type Pong struct {
 	Ping string `json:"ping"`
@@ -113,6 +161,12 @@ type ClientInterface interface {
 
 	// PingServer request
 	PingServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOperation request
+	GetOperation(ctx context.Context, opId int64, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SyncOperations request
+	SyncOperations(ctx context.Context, lastOpId int64, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) DeleteKey(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -165,6 +219,30 @@ func (c *Client) SetValue(ctx context.Context, key string, body SetValueJSONRequ
 
 func (c *Client) PingServer(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPingServerRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetOperation(ctx context.Context, opId int64, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOperationRequest(c.Server, opId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SyncOperations(ctx context.Context, lastOpId int64, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSyncOperationsRequest(c.Server, lastOpId)
 	if err != nil {
 		return nil, err
 	}
@@ -317,6 +395,74 @@ func NewPingServerRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetOperationRequest generates requests for GetOperation
+func NewGetOperationRequest(server string, opId int64) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "opId", runtime.ParamLocationPath, opId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/replicate/operation/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSyncOperationsRequest generates requests for SyncOperations
+func NewSyncOperationsRequest(server string, lastOpId int64) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "lastOpId", runtime.ParamLocationPath, lastOpId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/replicate/sync/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -373,6 +519,12 @@ type ClientWithResponsesInterface interface {
 
 	// PingServerWithResponse request
 	PingServerWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PingServerResponse, error)
+
+	// GetOperationWithResponse request
+	GetOperationWithResponse(ctx context.Context, opId int64, reqEditors ...RequestEditorFn) (*GetOperationResponse, error)
+
+	// SyncOperationsWithResponse request
+	SyncOperationsWithResponse(ctx context.Context, lastOpId int64, reqEditors ...RequestEditorFn) (*SyncOperationsResponse, error)
 }
 
 type DeleteKeyResponse struct {
@@ -470,6 +622,51 @@ func (r PingServerResponse) StatusCode() int {
 	return 0
 }
 
+type GetOperationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Operation
+	JSON404      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOperationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOperationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SyncOperationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]Operation
+}
+
+// Status returns HTTPResponse.Status
+func (r SyncOperationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SyncOperationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // DeleteKeyWithResponse request returning *DeleteKeyResponse
 func (c *ClientWithResponses) DeleteKeyWithResponse(ctx context.Context, key string, reqEditors ...RequestEditorFn) (*DeleteKeyResponse, error) {
 	rsp, err := c.DeleteKey(ctx, key, reqEditors...)
@@ -512,6 +709,24 @@ func (c *ClientWithResponses) PingServerWithResponse(ctx context.Context, reqEdi
 		return nil, err
 	}
 	return ParsePingServerResponse(rsp)
+}
+
+// GetOperationWithResponse request returning *GetOperationResponse
+func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, opId int64, reqEditors ...RequestEditorFn) (*GetOperationResponse, error) {
+	rsp, err := c.GetOperation(ctx, opId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOperationResponse(rsp)
+}
+
+// SyncOperationsWithResponse request returning *SyncOperationsResponse
+func (c *ClientWithResponses) SyncOperationsWithResponse(ctx context.Context, lastOpId int64, reqEditors ...RequestEditorFn) (*SyncOperationsResponse, error) {
+	rsp, err := c.SyncOperations(ctx, lastOpId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSyncOperationsResponse(rsp)
 }
 
 // ParseDeleteKeyResponse parses an HTTP response from a DeleteKeyWithResponse call
@@ -667,6 +882,65 @@ func ParsePingServerResponse(rsp *http.Response) (*PingServerResponse, error) {
 	return response, nil
 }
 
+// ParseGetOperationResponse parses an HTTP response from a GetOperationWithResponse call
+func ParseGetOperationResponse(rsp *http.Response) (*GetOperationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOperationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Operation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSyncOperationsResponse parses an HTTP response from a SyncOperationsWithResponse call
+func ParseSyncOperationsResponse(rsp *http.Response) (*SyncOperationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SyncOperationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []Operation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Delete a key-value pair
@@ -681,6 +955,12 @@ type ServerInterface interface {
 	// Health check endpoint
 	// (GET /ping)
 	PingServer(w http.ResponseWriter, r *http.Request)
+	// Get a specific operation by ID
+	// (GET /replicate/operation/{opId})
+	GetOperation(w http.ResponseWriter, r *http.Request, opId int64)
+	// Get all operations after specified ID
+	// (GET /replicate/sync/{lastOpId})
+	SyncOperations(w http.ResponseWriter, r *http.Request, lastOpId int64)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -708,6 +988,18 @@ func (_ Unimplemented) SetValue(w http.ResponseWriter, r *http.Request, key stri
 // Health check endpoint
 // (GET /ping)
 func (_ Unimplemented) PingServer(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a specific operation by ID
+// (GET /replicate/operation/{opId})
+func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, opId int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get all operations after specified ID
+// (GET /replicate/sync/{lastOpId})
+func (_ Unimplemented) SyncOperations(w http.ResponseWriter, r *http.Request, lastOpId int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -800,6 +1092,56 @@ func (siw *ServerInterfaceWrapper) PingServer(w http.ResponseWriter, r *http.Req
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PingServer(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "opId" -------------
+	var opId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "opId", chi.URLParam(r, "opId"), &opId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "opId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperation(w, r, opId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SyncOperations operation middleware
+func (siw *ServerInterfaceWrapper) SyncOperations(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "lastOpId" -------------
+	var lastOpId int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "lastOpId", chi.URLParam(r, "lastOpId"), &lastOpId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lastOpId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SyncOperations(w, r, lastOpId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -933,6 +1275,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/ping", wrapper.PingServer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/replicate/operation/{opId}", wrapper.GetOperation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/replicate/sync/{lastOpId}", wrapper.SyncOperations)
 	})
 
 	return r
@@ -1081,6 +1429,49 @@ func (response PingServerdefaultJSONResponse) VisitPingServerResponse(w http.Res
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type GetOperationRequestObject struct {
+	OpId int64 `json:"opId"`
+}
+
+type GetOperationResponseObject interface {
+	VisitGetOperationResponse(w http.ResponseWriter) error
+}
+
+type GetOperation200JSONResponse Operation
+
+func (response GetOperation200JSONResponse) VisitGetOperationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetOperation404JSONResponse ErrorResponse
+
+func (response GetOperation404JSONResponse) VisitGetOperationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SyncOperationsRequestObject struct {
+	LastOpId int64 `json:"lastOpId"`
+}
+
+type SyncOperationsResponseObject interface {
+	VisitSyncOperationsResponse(w http.ResponseWriter) error
+}
+
+type SyncOperations200JSONResponse []Operation
+
+func (response SyncOperations200JSONResponse) VisitSyncOperationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Delete a key-value pair
@@ -1095,6 +1486,12 @@ type StrictServerInterface interface {
 	// Health check endpoint
 	// (GET /ping)
 	PingServer(ctx context.Context, request PingServerRequestObject) (PingServerResponseObject, error)
+	// Get a specific operation by ID
+	// (GET /replicate/operation/{opId})
+	GetOperation(ctx context.Context, request GetOperationRequestObject) (GetOperationResponseObject, error)
+	// Get all operations after specified ID
+	// (GET /replicate/sync/{lastOpId})
+	SyncOperations(ctx context.Context, request SyncOperationsRequestObject) (SyncOperationsResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1228,6 +1625,58 @@ func (sh *strictHandler) PingServer(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PingServerResponseObject); ok {
 		if err := validResponse.VisitPingServerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOperation operation middleware
+func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, opId int64) {
+	var request GetOperationRequestObject
+
+	request.OpId = opId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOperation(ctx, request.(GetOperationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOperation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOperationResponseObject); ok {
+		if err := validResponse.VisitGetOperationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SyncOperations operation middleware
+func (sh *strictHandler) SyncOperations(w http.ResponseWriter, r *http.Request, lastOpId int64) {
+	var request SyncOperationsRequestObject
+
+	request.LastOpId = lastOpId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SyncOperations(ctx, request.(SyncOperationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SyncOperations")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SyncOperationsResponseObject); ok {
+		if err := validResponse.VisitSyncOperationsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
