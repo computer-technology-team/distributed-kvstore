@@ -126,8 +126,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /replicate/operation/{opId}:
+    get:
+      operationId: getOperation
+      summary: Get a specific operation by ID
+      parameters:
+        - name: opId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Operation found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operation"
+        '404':
+          description: Operation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /replicate/sync/{lastOpId}:
+    get:
+      operationId: syncOperations
+      summary: Get all operations after specified ID
+      parameters:
+        - name: lastOpId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: List of operations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Operation"
 components:
   schemas:
+    Operation:
+      type: object
+      required:
+        - id
+        - type
+        - key
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Unique operation ID
+        type:
+          type: string
+          enum: [set, delete]
+          description: Type of operation
+        key:
+          type: string
+          description: Key affected by the operation
+        value:
+          type: string
+          description: Value for set operations (optional for delete)
     Pong:
       type: object
       required:

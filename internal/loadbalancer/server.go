@@ -97,3 +97,11 @@ func filterHealthyNodes(nodes []common.Node) []common.Node {
 		return node.Status == common.Healthy
 	})
 }
+
+func (s *server) GetOperation(ctx context.Context, request kvstoreAPI.GetOperationRequestObject) (kvstoreAPI.GetOperationResponseObject, error) {
+	panic("this should not have happened")
+}
+
+func (s *server) SyncOperations(ctx context.Context, request kvstoreAPI.SyncOperationsRequestObject) (kvstoreAPI.SyncOperationsResponseObject, error) {
+	panic("this should not have happened")
+}
