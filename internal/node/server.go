@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
+	"github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	internalKVStore "github.com/computer-technology-team/distributed-kvstore/internal/kvstore"
 	"github.com/google/uuid"
@@ -14,35 +14,32 @@ import (
 )
 
 type server struct {
-	kvStore    *internalKVStore.NodeStore
-	id         uuid.UUID
-	cancelSync context.CancelFunc
+	nodeStore *internalKVStore.NodeStore
+	id        uuid.UUID
 }
 
 func NewServer(id types.UUID) database.StrictServerInterface {
 	return &server{
-		kvStore: internalKVStore.NewNodeStore(),
-		id:      id,
+		nodeStore: internalKVStore.NewNodeStore(id),
+		id:        id,
 	}
 }
 
 // Database API implementation
 func (s *server) GetClusterState(ctx context.Context, request database.GetClusterStateRequestObject) (database.GetClusterStateResponseObject, error) {
+	state := s.nodeStore.GetState()
 
-	return database.GetClusterState200JSONResponse{
-		Partitions: s.kvStore.GetPartitionRoles(),
-		NodeID:     s.id,
-	}, nil
+	return database.GetClusterState200JSONResponse(state), nil
 }
 
 // UpdateNodeState implements database.StrictServerInterface.
 func (s *server) UpdateNodeState(ctx context.Context, request database.UpdateNodeStateRequestObject) (database.UpdateNodeStateResponseObject, error) {
-	if request.NodeID != s.id {
-		slog.Error("node ids don't match")
-		return database.UpdateNodeState500JSONResponse{Error: "node id does not match"}, nil
+	if request.Body == nil {
+		slog.Error("request body is nil")
+		return database.UpdateNodeState400JSONResponse{Error: "request body is nil"}, nil
 	}
 
-	err := s.kvStore.SetState(*request.Body)
+	err := s.nodeStore.SetState(*request.Body)
 	if err != nil {
 		slog.Error("failed to set state", "error", err)
 		return database.UpdateNodeState500JSONResponse{Error: fmt.Sprintf("failed to set state: %v", err)}, nil
@@ -57,7 +54,7 @@ func (s *server) GetValueFromPartition(ctx context.Context, request database.Get
 	key := request.Key
 
 	// Get the value directly from the specified partition
-	if value, exists, err := s.kvStore.Get(partitionID, key); err == nil && exists {
+	if value, exists, err := s.nodeStore.Get(partitionID, key); err == nil && exists {
 		return database.GetValueFromPartition200JSONResponse{
 			Value: nullable.NewNullableWithValue(value),
 			Key:   key,
@@ -82,7 +79,7 @@ func (s *server) SetValueInPartition(ctx context.Context, request database.SetVa
 	value := request.Body.Value
 
 	// Set the value directly in the specified partition
-	if err := s.kvStore.Set(partitionID, key, value); err != nil {
+	if err := s.nodeStore.Set(partitionID, key, value); err != nil {
 		return database.SetValueInPartition400JSONResponse{
 			Error: err.Error(),
 		}, nil
@@ -98,7 +95,7 @@ func (s *server) DeleteKeyFromPartition(ctx context.Context, request database.De
 	partitionID := request.PartitionID
 	key := request.Key
 
-	deleted, err := s.kvStore.Delete(partitionID, key)
+	deleted, err := s.nodeStore.Delete(partitionID, key)
 	if err != nil {
 		return database.DeleteKeyFromPartition500JSONResponse{
 			Error: err.Error(),
@@ -116,91 +113,79 @@ func (s *server) DeleteKeyFromPartition(ctx context.Context, request database.De
 	}, nil
 }
 
-func (s *server) GetOperation(ctx context.Context, request kvstoreAPI.GetOperationRequestObject) (kvstoreAPI.GetOperationResponseObject, error) {
-	op, exists := s.kvStore.GetOperation(request.OpId)
-	if !exists {
-		return kvstoreAPI.GetOperation404JSONResponse{}, nil
-	}
+// GetOperation implements the replication endpoint to get a specific operation by ID
+func (s *server) GetOperation(ctx context.Context, request database.GetOperationRequestObject) (database.GetOperationResponseObject, error) {
+	partitionId := request.PartitionID
+	operationId := request.OperationID
 
-	return kvstoreAPI.GetOperation200JSONResponse{
-		Id:    op.Id,
-		Type:  op.Type,
-		Key:   op.Key,
-		Value: op.Value,
-	}, nil
-}
-
-func (s *server) SyncOperations(ctx context.Context, request kvstoreAPI.SyncOperationsRequestObject) (kvstoreAPI.SyncOperationsResponseObject, error) {
-	ops := s.kvStore.GetOperationsAfter(request.LastOpId)
-	return kvstoreAPI.SyncOperations200JSONResponse(ops), nil
-}
-
-func (s *server) startBackgroundSync() {
-	ctx, cancel := context.WithCancel(context.Background())
-	s.cancelSync = cancel
-
-	go func() {
-		ticker := time.NewTicker(s.kvStore.SyncInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				s.syncWithMaster()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-}
-
-func (s *server) Stop() {
-	if s.cancelSync != nil {
-		s.cancelSync()
-	}
-}
-
-func (s *server) syncWithMaster() {
-	lastOpID := s.kvStore.GetLastSyncedOpID()
-
-	// Get operations from master
-	client, err := kvstoreAPI.NewClientWithResponses(s.kvStore.MasterAddr)
+	operation, err := s.nodeStore.GetOperation(partitionId, operationId)
 	if err != nil {
-		slog.Info("Failed to create client for master: %v", err)
-		return
-	}
+		slog.Error("failed to get operation",
+			"error", err,
+			"partition_id", partitionId,
+			"operation_id", operationId)
 
-	resp, err := client.SyncOperationsWithResponse(context.Background(), lastOpID)
-	if err != nil {
-		slog.Info("Failed to sync operations: %v", err)
-		return
-	}
-
-	if resp.JSON200 != nil {
-		s.applyOperations(*resp.JSON200)
-	}
-}
-
-func (s *server) applyOperations(ops []kvstoreAPI.Operation) {
-	s.kvStore.mu.Lock()
-	defer s.kvStore.mu.Unlock()
-
-	for _, op := range ops {
-		switch op.Type {
-		case "set":
-			s.kvStore.store[op.Key] = op.Value
-		case "delete":
-			delete(s.kvStore.store, op.Key)
+		if err.Error() == "operation not found" || err.Error() == "operation is out of bound" {
+			return database.GetOperation404JSONResponse{
+				Error: fmt.Sprintf("Operation not found: %v", err),
+			}, nil
 		}
 
-		// Update operation log
-		s.kvStore.opLog = append(s.kvStore.opLog, Operation{
-			ID:    op.Id,
-			Type:  OperationType(op.Type),
-			Key:   op.Key,
-			Value: op.Value,
-		})
+		if err.Error() == "partition not found" {
+			return database.GetOperation404JSONResponse{
+				Error: fmt.Sprintf("Partition not found: %s", partitionId),
+			}, nil
+		}
 
-		s.kvStore.lastSyncedOpID = op.Id
+		if err.Error() == "partition is not a stable master" {
+			return database.GetOperation404JSONResponse{
+				Error: "Partition is not a stable master",
+			}, nil
+		}
+
+		return database.GetOperation404JSONResponse{
+			Error: fmt.Sprintf("Internal server error: %v", err),
+		}, nil
 	}
+
+	return database.GetOperation200JSONResponse(*operation), nil
+}
+
+// GetOperationsAfter implements the replication endpoint to get operations after a specific ID
+func (s *server) GetOperationsAfter(ctx context.Context, request database.GetOperationsAfterRequestObject) (database.GetOperationsAfterResponseObject, error) {
+	partitionId := request.PartitionID
+	lastOperationId := request.LastOperationID
+
+	operations, err := s.nodeStore.GetOperations(partitionId, lastOperationId)
+	if err != nil {
+		slog.Error("failed to get operations for checkpoint",
+			"error", err,
+			"partition_id", partitionId,
+			"last_operation_id", lastOperationId)
+
+		if err.Error() == "partition not found" {
+			return database.GetOperationsAfter200JSONResponse([]common.Operation{}), nil
+		}
+
+		if err.Error() == "partition is not a stable master" {
+			return database.GetOperationsAfter200JSONResponse([]common.Operation{}), nil
+		}
+
+		return database.GetOperationsAfter200JSONResponse([]common.Operation{}), nil
+	}
+
+	if len(operations) == 0 {
+		slog.Info("no operations found for checkpoint",
+			"partition_id", partitionId,
+			"last_operation_id", lastOperationId)
+
+		return database.GetOperationsAfter200JSONResponse([]common.Operation{}), nil
+	}
+
+	slog.Info("returning operations for checkpoint",
+		"partition_id", partitionId,
+		"last_operation_id", lastOperationId,
+		"operations_count", len(operations))
+
+	return database.GetOperationsAfter200JSONResponse(operations), nil
 }

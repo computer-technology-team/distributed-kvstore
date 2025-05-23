@@ -135,27 +135,6 @@ paths:
                 $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
 components:
   schemas:
-    Operation:
-      type: object
-      required:
-        - id
-        - type
-        - key
-      properties:
-        id:
-          type: integer
-          format: int64
-          description: Unique operation ID
-        type:
-          type: string
-          enum: [set, delete]
-          description: Type of operation
-        key:
-          type: string
-          description: Key affected by the operation
-        value:
-          type: string
-          description: Value for set operations (optional for delete)
     Pong:
       type: object
       required:

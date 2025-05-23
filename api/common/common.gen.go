@@ -8,6 +8,12 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for OperationType.
+const (
+	Delete OperationType = "delete"
+	Set    OperationType = "set"
+)
+
 // Defines values for Status.
 const (
 	Healthy       Status = "healthy"
@@ -65,6 +71,24 @@ type Node struct {
 	// Partitions Map of partition IDs to role information for this node
 	Partitions map[string]PartitionRole `json:"partitions"`
 }
+
+// Operation defines model for Operation.
+type Operation struct {
+	// ID Serial(WAL Level) Unique operation ID
+	ID int64 `json:"id"`
+
+	// Key Key affected by the operation
+	Key string `json:"key"`
+
+	// Type Type of operation
+	Type OperationType `json:"type"`
+
+	// Value Value for set operations (optional for delete)
+	Value nullable.Nullable[string] `json:"value"`
+}
+
+// OperationType Type of operation
+type OperationType string
 
 // Partition defines model for Partition.
 type Partition struct {

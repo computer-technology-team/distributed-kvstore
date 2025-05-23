@@ -1,13 +1,15 @@
 package kvstore
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/common"
-	"github.com/computer-technology-team/distributed-kvstore/api/database"
+	"github.com/google/uuid"
+	"github.com/oapi-codegen/nullable"
 	"github.com/samber/lo"
 )
 
@@ -17,7 +19,7 @@ type KVStore struct {
 	store     map[string]string // Regular map for key-value pairs
 	isMaster  bool              // Whether this node is the master for this partition
 	isSyncing bool              // Whether this partition is currently syncing
-	opLog     []kvstoreAPI.Operation
+	opLog     []common.Operation
 	nextOpID  int64
 }
 
@@ -26,14 +28,17 @@ type NodeStore struct {
 	mu          sync.RWMutex
 	stores      map[string]*KVStore       // Map of partitionID to KVStore
 	lastUpdated atomic.Pointer[time.Time] // Last updated timestamp
+	state       common.State
+	id          uuid.UUID
 }
 
 // NewNodeStore creates a new NodeStore instance
-func NewNodeStore() *NodeStore {
+func NewNodeStore(id uuid.UUID) *NodeStore {
 	t := time.Now()
 	ns := &NodeStore{
 		stores: make(map[string]*KVStore),
 	}
+
 	ns.lastUpdated.Store(&t)
 	return ns
 }
@@ -47,11 +52,20 @@ func newKVStoreInstance() *KVStore {
 	}
 }
 
-func (ns *NodeStore) SetState(state database.NodeState) error {
+func (ns *NodeStore) SetState(state common.State) error {
 	ns.mu.Lock()
 	defer ns.mu.Unlock()
 
-	toBeAdded, toBeRemoved := lo.Difference(lo.Keys(state.Partitions), lo.Keys(ns.stores))
+	ns.state = state
+
+	node, nodeFound := extractNodeFromState(state, ns.id)
+	if !nodeFound {
+		return errors.New("node not found in state")
+	}
+
+	partitionRoles := node.Partitions
+
+	toBeAdded, toBeRemoved := lo.Difference(lo.Keys(partitionRoles), lo.Keys(ns.stores))
 
 	// Update the timestamp
 	t := time.Now()
@@ -60,8 +74,19 @@ func (ns *NodeStore) SetState(state database.NodeState) error {
 	// Add new partitions
 	for _, partitionID := range toBeAdded {
 		store := newKVStoreInstance()
-		store.isMaster = state.Partitions[partitionID].IsMaster
+		store.isMaster = partitionRoles[partitionID].IsMaster
+		store.isSyncing = partitionRoles[partitionID].IsSyncing
 		ns.stores[partitionID] = store
+	}
+
+	// Update existing partitions
+	for partitionID, store := range ns.stores {
+		if role, exists := partitionRoles[partitionID]; exists {
+			store.mu.Lock()
+			store.isMaster = role.IsMaster
+			store.isSyncing = role.IsSyncing
+			store.mu.Unlock()
+		}
 	}
 
 	// Remove partitions that are no longer assigned to this node
@@ -93,6 +118,15 @@ func (ns *NodeStore) Set(partitionID string, key, value string) error {
 
 	// Set the value in the store
 	store.store[key] = value
+
+	store.opLog = append(store.opLog, common.Operation{
+		ID:    store.nextOpID,
+		Key:   key,
+		Type:  common.Set,
+		Value: nullable.NewNullableWithValue(value),
+	})
+	store.nextOpID += 1
+
 	return nil
 }
 
@@ -146,23 +180,66 @@ func (ns *NodeStore) Delete(partitionID string, key string) (bool, error) {
 
 	// Delete the key
 	delete(store.store, key)
+
+	store.opLog = append(store.opLog, common.Operation{
+		ID:    store.nextOpID,
+		Key:   key,
+		Type:  common.Delete,
+		Value: nullable.NewNullNullable[string](),
+	})
+	store.nextOpID += 1
+
 	return true, nil
 }
 
-func (ns *NodeStore) GetPartitionRoles() map[string]common.PartitionRole {
+func (ns *NodeStore) GetState() common.State {
 	ns.mu.RLock()
 	defer ns.mu.RUnlock()
 
-	partitions := make(map[string]common.PartitionRole)
-	for partitionID, store := range ns.stores {
-		store.mu.RLock()
-		partitions[partitionID] = common.PartitionRole{
-			IsMaster:  store.isMaster,
-			IsSyncing: store.isSyncing,
-			Status:    common.Healthy,
-		}
-		store.mu.RUnlock()
+	return ns.state
+}
+
+func (ns *NodeStore) GetOperation(partitionID string, operationID int64) (*common.Operation, error) {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+	partitionStore, found := ns.stores[partitionID]
+	if !found {
+		return nil, errors.New("partition not found")
 	}
 
-	return partitions
+	partitionStore.mu.RLock()
+	defer partitionStore.mu.RUnlock()
+
+	if !partitionStore.isMaster || partitionStore.isSyncing {
+		return nil, errors.New("partition is not a stable master")
+	}
+
+	return partitionStore.GetOperation(operationID)
+}
+
+func (ns *NodeStore) GetOperations(partitionID string, fromOperationID int64) ([]common.Operation, error) {
+	ns.mu.RLock()
+	defer ns.mu.RUnlock()
+
+	partitionStore, found := ns.stores[partitionID]
+	if !found {
+		return nil, errors.New("partition not found")
+	}
+
+	partitionStore.mu.RLock()
+	defer partitionStore.mu.RUnlock()
+
+	if !partitionStore.isMaster || partitionStore.isSyncing {
+		return nil, errors.New("partition is not a stable master")
+	}
+
+	operations := partitionStore.GetOperationsAfter(fromOperationID)
+	return operations, nil
+}
+
+func extractNodeFromState(state common.State, nodeID uuid.UUID) (common.Node, bool) {
+	return lo.Find(state.Nodes, func(item common.Node) bool {
+		return item.Id == nodeID
+	})
+
 }

@@ -5,23 +5,7 @@ info:
 components:
   schemas:
     NodeState:
-      type: object
-      required:
-        - nodeId
-        - partitions
-      properties:
-        nodeId:
-          type: string
-          format: uuid
-          description: Unique identifier for the node
-          example: "123e4567-e89b-12d3-a456-426614174000"
-          x-go-name: NodeID
-        partitions:
-          type: object
-          description: Map of partition IDs to role information for this node
-          additionalProperties:
-            $ref: "../common/api.yaml#/components/schemas/PartitionRole"
-          x-go-name: Partitions
+      $ref: "../common/api.yaml#/components/schemas/State"
 paths:
   /cluster/state:
     get:
@@ -220,3 +204,67 @@ paths:
             application/json:
               schema:
                 $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+  /replication/{partitionId}/operation/{operationId}:
+    get:
+      operationId: getOperation
+      x-go-name: GetOperation
+      summary: Get a specific operation by ID
+      parameters:
+        - name: partitionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the partition
+          example: "partition-1"
+          x-go-name: PartitionID
+        - name: operationId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          x-go-name: OperationID
+      responses:
+        "200":
+          description: Operation found
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/Operation"
+        "404":
+          description: Operation not found
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+  /replication/{partitionId}/checkpoint/{lastOperationId}:
+    get:
+      operationId: getOperationsAfter
+      x-go-name: GetOperationsAfter
+      summary: Get all operations after specified ID
+      parameters:
+        - name: partitionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the partition
+          example: "partition-1"
+          x-go-name: PartitionID
+        - name: lastOperationId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          x-go-name: LastOperationID
+      responses:
+        "200":
+          description: List of operations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "../common/api.yaml#/components/schemas/Operation"

@@ -215,3 +215,30 @@ components:
           description: Human-readable error message
           example: "The request is invalid"
           x-go-name: Message
+    Operation:
+      type: object
+      required:
+        - id
+        - type
+        - key
+        - value
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Serial(WAL Level) Unique operation ID
+          x-go-name: ID
+        type:
+          type: string
+          enum: [set, delete]
+          description: Type of operation
+          x-go-name: Type
+        key:
+          type: string
+          description: Key affected by the operation
+          x-go-name: Key
+        value:
+          type: string
+          description: Value for set operations (optional for delete)
+          nullable: true
+          x-go-name: Value

@@ -21,13 +21,7 @@ import (
 )
 
 // NodeState defines model for NodeState.
-type NodeState struct {
-	// NodeID Unique identifier for the node
-	NodeID openapi_types.UUID `json:"nodeId"`
-
-	// Partitions Map of partition IDs to role information for this node
-	Partitions map[string]externalRef0.PartitionRole `json:"partitions"`
-}
+type NodeState = externalRef0.State
 
 // UpdateNodeStateJSONRequestBody defines body for UpdateNodeState for application/json ContentType.
 type UpdateNodeStateJSONRequestBody = NodeState
@@ -126,6 +120,12 @@ type ClientInterface interface {
 	SetValueInPartitionWithBody(ctx context.Context, partitionID string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SetValueInPartition(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOperationsAfter request
+	GetOperationsAfter(ctx context.Context, partitionID string, lastOperationID int64, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetOperation request
+	GetOperation(ctx context.Context, partitionID string, operationID int64, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) GetClusterState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -202,6 +202,30 @@ func (c *Client) SetValueInPartitionWithBody(ctx context.Context, partitionID st
 
 func (c *Client) SetValueInPartition(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSetValueInPartitionRequest(c.Server, partitionID, key, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetOperationsAfter(ctx context.Context, partitionID string, lastOperationID int64, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOperationsAfterRequest(c.Server, partitionID, lastOperationID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetOperation(ctx context.Context, partitionID string, operationID int64, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetOperationRequest(c.Server, partitionID, operationID)
 	if err != nil {
 		return nil, err
 	}
@@ -422,6 +446,88 @@ func NewSetValueInPartitionRequestWithBody(server string, partitionID string, ke
 	return req, nil
 }
 
+// NewGetOperationsAfterRequest generates requests for GetOperationsAfter
+func NewGetOperationsAfterRequest(server string, partitionID string, lastOperationID int64) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "partitionId", runtime.ParamLocationPath, partitionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "lastOperationId", runtime.ParamLocationPath, lastOperationID)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/replication/%s/checkpoint/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetOperationRequest generates requests for GetOperation
+func NewGetOperationRequest(server string, partitionID string, operationID int64) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "partitionId", runtime.ParamLocationPath, partitionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "operationId", runtime.ParamLocationPath, operationID)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/replication/%s/operation/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -483,6 +589,12 @@ type ClientWithResponsesInterface interface {
 	SetValueInPartitionWithBodyWithResponse(ctx context.Context, partitionID string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetValueInPartitionResponse, error)
 
 	SetValueInPartitionWithResponse(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*SetValueInPartitionResponse, error)
+
+	// GetOperationsAfterWithResponse request
+	GetOperationsAfterWithResponse(ctx context.Context, partitionID string, lastOperationID int64, reqEditors ...RequestEditorFn) (*GetOperationsAfterResponse, error)
+
+	// GetOperationWithResponse request
+	GetOperationWithResponse(ctx context.Context, partitionID string, operationID int64, reqEditors ...RequestEditorFn) (*GetOperationResponse, error)
 }
 
 type GetClusterStateResponse struct {
@@ -605,6 +717,51 @@ func (r SetValueInPartitionResponse) StatusCode() int {
 	return 0
 }
 
+type GetOperationsAfterResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]externalRef0.Operation
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOperationsAfterResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOperationsAfterResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetOperationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *externalRef0.Operation
+	JSON404      *externalRef0.ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetOperationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetOperationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // GetClusterStateWithResponse request returning *GetClusterStateResponse
 func (c *ClientWithResponses) GetClusterStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClusterStateResponse, error) {
 	rsp, err := c.GetClusterState(ctx, reqEditors...)
@@ -664,6 +821,24 @@ func (c *ClientWithResponses) SetValueInPartitionWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseSetValueInPartitionResponse(rsp)
+}
+
+// GetOperationsAfterWithResponse request returning *GetOperationsAfterResponse
+func (c *ClientWithResponses) GetOperationsAfterWithResponse(ctx context.Context, partitionID string, lastOperationID int64, reqEditors ...RequestEditorFn) (*GetOperationsAfterResponse, error) {
+	rsp, err := c.GetOperationsAfter(ctx, partitionID, lastOperationID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOperationsAfterResponse(rsp)
+}
+
+// GetOperationWithResponse request returning *GetOperationResponse
+func (c *ClientWithResponses) GetOperationWithResponse(ctx context.Context, partitionID string, operationID int64, reqEditors ...RequestEditorFn) (*GetOperationResponse, error) {
+	rsp, err := c.GetOperation(ctx, partitionID, operationID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetOperationResponse(rsp)
 }
 
 // ParseGetClusterStateResponse parses an HTTP response from a GetClusterStateWithResponse call
@@ -866,6 +1041,65 @@ func ParseSetValueInPartitionResponse(rsp *http.Response) (*SetValueInPartitionR
 	return response, nil
 }
 
+// ParseGetOperationsAfterResponse parses an HTTP response from a GetOperationsAfterWithResponse call
+func ParseGetOperationsAfterResponse(rsp *http.Response) (*GetOperationsAfterResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOperationsAfterResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []externalRef0.Operation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetOperationResponse parses an HTTP response from a GetOperationWithResponse call
+func ParseGetOperationResponse(rsp *http.Response) (*GetOperationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetOperationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest externalRef0.Operation
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Get current cluster state
@@ -883,6 +1117,12 @@ type ServerInterface interface {
 	// Set key-value pair in partition
 	// (PUT /partitions/{partitionId}/keys/{key})
 	SetValueInPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string)
+	// Get all operations after specified ID
+	// (GET /replication/{partitionId}/checkpoint/{lastOperationId})
+	GetOperationsAfter(w http.ResponseWriter, r *http.Request, partitionID string, lastOperationID int64)
+	// Get a specific operation by ID
+	// (GET /replication/{partitionId}/operation/{operationId})
+	GetOperation(w http.ResponseWriter, r *http.Request, partitionID string, operationID int64)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -916,6 +1156,18 @@ func (_ Unimplemented) GetValueFromPartition(w http.ResponseWriter, r *http.Requ
 // Set key-value pair in partition
 // (PUT /partitions/{partitionId}/keys/{key})
 func (_ Unimplemented) SetValueInPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get all operations after specified ID
+// (GET /replication/{partitionId}/checkpoint/{lastOperationId})
+func (_ Unimplemented) GetOperationsAfter(w http.ResponseWriter, r *http.Request, partitionID string, lastOperationID int64) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a specific operation by ID
+// (GET /replication/{partitionId}/operation/{operationId})
+func (_ Unimplemented) GetOperation(w http.ResponseWriter, r *http.Request, partitionID string, operationID int64) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1069,6 +1321,74 @@ func (siw *ServerInterfaceWrapper) SetValueInPartition(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// GetOperationsAfter operation middleware
+func (siw *ServerInterfaceWrapper) GetOperationsAfter(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "partitionId" -------------
+	var partitionID string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "partitionId", chi.URLParam(r, "partitionId"), &partitionID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "partitionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "lastOperationId" -------------
+	var lastOperationID int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "lastOperationId", chi.URLParam(r, "lastOperationId"), &lastOperationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "lastOperationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperationsAfter(w, r, partitionID, lastOperationID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetOperation operation middleware
+func (siw *ServerInterfaceWrapper) GetOperation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "partitionId" -------------
+	var partitionID string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "partitionId", chi.URLParam(r, "partitionId"), &partitionID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "partitionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "operationId" -------------
+	var operationID int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "operationId", chi.URLParam(r, "operationId"), &operationID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operationId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetOperation(w, r, partitionID, operationID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1196,6 +1516,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/partitions/{partitionId}/keys/{key}", wrapper.SetValueInPartition)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/replication/{partitionId}/checkpoint/{lastOperationId}", wrapper.GetOperationsAfter)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/replication/{partitionId}/operation/{operationId}", wrapper.GetOperation)
 	})
 
 	return r
@@ -1388,6 +1714,51 @@ func (response SetValueInPartition500JSONResponse) VisitSetValueInPartitionRespo
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetOperationsAfterRequestObject struct {
+	PartitionID     string `json:"partitionId"`
+	LastOperationID int64  `json:"lastOperationId"`
+}
+
+type GetOperationsAfterResponseObject interface {
+	VisitGetOperationsAfterResponse(w http.ResponseWriter) error
+}
+
+type GetOperationsAfter200JSONResponse []externalRef0.Operation
+
+func (response GetOperationsAfter200JSONResponse) VisitGetOperationsAfterResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetOperationRequestObject struct {
+	PartitionID string `json:"partitionId"`
+	OperationID int64  `json:"operationId"`
+}
+
+type GetOperationResponseObject interface {
+	VisitGetOperationResponse(w http.ResponseWriter) error
+}
+
+type GetOperation200JSONResponse externalRef0.Operation
+
+func (response GetOperation200JSONResponse) VisitGetOperationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetOperation404JSONResponse externalRef0.ErrorResponse
+
+func (response GetOperation404JSONResponse) VisitGetOperationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Get current cluster state
@@ -1405,6 +1776,12 @@ type StrictServerInterface interface {
 	// Set key-value pair in partition
 	// (PUT /partitions/{partitionId}/keys/{key})
 	SetValueInPartition(ctx context.Context, request SetValueInPartitionRequestObject) (SetValueInPartitionResponseObject, error)
+	// Get all operations after specified ID
+	// (GET /replication/{partitionId}/checkpoint/{lastOperationId})
+	GetOperationsAfter(ctx context.Context, request GetOperationsAfterRequestObject) (GetOperationsAfterResponseObject, error)
+	// Get a specific operation by ID
+	// (GET /replication/{partitionId}/operation/{operationId})
+	GetOperation(ctx context.Context, request GetOperationRequestObject) (GetOperationResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1574,6 +1951,60 @@ func (sh *strictHandler) SetValueInPartition(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetValueInPartitionResponseObject); ok {
 		if err := validResponse.VisitSetValueInPartitionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOperationsAfter operation middleware
+func (sh *strictHandler) GetOperationsAfter(w http.ResponseWriter, r *http.Request, partitionID string, lastOperationID int64) {
+	var request GetOperationsAfterRequestObject
+
+	request.PartitionID = partitionID
+	request.LastOperationID = lastOperationID
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOperationsAfter(ctx, request.(GetOperationsAfterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOperationsAfter")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOperationsAfterResponseObject); ok {
+		if err := validResponse.VisitGetOperationsAfterResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetOperation operation middleware
+func (sh *strictHandler) GetOperation(w http.ResponseWriter, r *http.Request, partitionID string, operationID int64) {
+	var request GetOperationRequestObject
+
+	request.PartitionID = partitionID
+	request.OperationID = operationID
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetOperation(ctx, request.(GetOperationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetOperation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetOperationResponseObject); ok {
+		if err := validResponse.VisitGetOperationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

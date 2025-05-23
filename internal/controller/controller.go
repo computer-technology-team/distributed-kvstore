@@ -14,6 +14,7 @@ import (
 	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	"github.com/computer-technology-team/distributed-kvstore/api/loadbalancer"
 	"github.com/google/uuid"
+	"github.com/mohae/deepcopy"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/samber/lo"
 )
@@ -80,12 +81,11 @@ func (c *Controller) AddPartition(partitionID string) error {
 			return err
 		}
 
-		nodeStateUpdates := lo.Map(updatedNodeIds, func(nodeID openapi_types.UUID, _ int) database.NodeState {
-			node, _ := lo.Find(c.state.Nodes, func(n common.Node) bool { return n.Id == nodeID })
-			return database.NodeState{
-				NodeID:     nodeID,
-				Partitions: node.Partitions,
-			}
+		// Create a deep copy of the state to avoid race conditions
+		stateCopy := deepcopy.Copy(c.state).(common.State)
+
+		nodeStateUpdates := lo.Map(updatedNodeIds, func(nodeID openapi_types.UUID, _ int) lo.Tuple2[openapi_types.UUID, database.NodeState] {
+			return lo.T2(nodeID, stateCopy)
 		})
 
 		go func() {
@@ -306,14 +306,15 @@ func (c *Controller) generateVirtualNodesForPartition(partitionId string, count 
 	return nil
 }
 
-func (c *Controller) dispatchNodeState(nodeStateUpdates []database.NodeState) {
-	for _, node := range nodeStateUpdates {
-		dbClient := c.nodeClients[node.NodeID]
+func (c *Controller) dispatchNodeState(nodeStateUpdates []lo.Tuple2[openapi_types.UUID, database.NodeState]) {
+	for _, update := range nodeStateUpdates {
+		nodeID, state := update.Unpack()
+		dbClient := c.nodeClients[nodeID]
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
-		resp, err := dbClient.UpdateNodeStateWithResponse(ctx, node.NodeID, database.UpdateNodeStateJSONRequestBody(node))
+		resp, err := dbClient.UpdateNodeStateWithResponse(ctx, nodeID, database.UpdateNodeStateJSONRequestBody(state))
 		if err != nil || resp.StatusCode() != 200 {
-			slog.Error("could not update node status", "node_id", node.NodeID, "response_status_code", resp.StatusCode())
+			slog.Error("could not update node status", "node_id", nodeID, "response_status_code", resp.StatusCode())
 		}
 	}
 }
