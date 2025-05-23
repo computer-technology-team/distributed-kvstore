@@ -1,4 +1,7 @@
 version: "3.8"
+# Note: Nodes are managed separately using the manage-nodes.sh script
+# Run ./manage-nodes.sh for usage information
+# Example: ./manage-nodes.sh add --count 3 --port-start 12345
 services:
   loadbalancer:
     build:

@@ -49,12 +49,45 @@ make build
 ### Running the Service
 
 ```bash
+# Start the controller and load balancer
+docker compose up -d
+
 # Start a single node
 ./kvstore servenode
 
 # For more options
 ./kvstore --help
 ```
+
+### Managing Nodes with Docker
+
+The project includes a script to help manage nodes in a Docker environment. This allows you to add or remove nodes on demand without having to manually configure each one.
+
+```bash
+# View usage information
+./manage-nodes.sh
+
+# Add 3 nodes starting from port 12345
+./manage-nodes.sh add --count 3 --port-start 12345
+
+# List all running nodes
+./manage-nodes.sh list
+
+# Remove a specific node
+./manage-nodes.sh remove --name node12345
+
+# Remove all nodes
+./manage-nodes.sh remove --all
+```
+
+Each node will automatically:
+1. Build the Docker image if it doesn't exist
+2. Run with a unique port and container name
+3. Register with the controller upon startup
+4. Include health checks to ensure it's functioning properly
+5. Use the host network for optimal performance
+
+The script makes it easy to scale your cluster up or down based on your needs.
 
 ## Configuration
 
