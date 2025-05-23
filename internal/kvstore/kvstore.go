@@ -3,6 +3,7 @@ package kvstore
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,7 @@ type NodeStore struct {
 func NewNodeStore(id uuid.UUID) *NodeStore {
 	t := time.Now()
 	ns := &NodeStore{
+		id:     id,
 		stores: make(map[string]*KVStore),
 	}
 
@@ -60,6 +62,7 @@ func (ns *NodeStore) SetState(state common.State) error {
 
 	node, nodeFound := extractNodeFromState(state, ns.id)
 	if !nodeFound {
+		slog.Warn("node not found", "state", state)
 		return errors.New("node not found in state")
 	}
 

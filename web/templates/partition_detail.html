@@ -22,7 +22,13 @@
         <h2>{{ .Title }}</h2>
         <div class="partition-detail">
             <h3>Partition ID: {{.Partition.Id}}</h3>
-            <p>Status: <span class="status-{{.Partition.Status}}">{{.Partition.Status}}</span></p>
+            <p>Status: 
+                {{if .Partition.IsMigrating}}
+                    <span class="status-migrating">Migrating</span>
+                {{else}}
+                    <span class="status-normal">Normal</span>
+                {{end}}
+            </p>
             
             <h4>Master Node</h4>
             <p>{{.Partition.MasterNodeId}}</p>

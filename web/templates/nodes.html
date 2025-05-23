@@ -44,8 +44,7 @@
                                 {{range $partitionId, $role := .Partitions}}
                                     <li>
                                         <a href="/partitions/{{$partitionId}}">{{$partitionId}}</a>
-                                        ({{if $role.IsMaster}}Master{{else}}Replica{{end}}, 
-                                        <span class="status-{{$role.Status}}">{{$role.Status}}</span>)
+                                        ({{if $role.IsMaster}}Master{{else}}Replica{{end}}{{if $role.IsSyncing}}, Syncing{{end}})
                                     </li>
                                 {{end}}
                                 </ul>

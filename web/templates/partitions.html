@@ -22,13 +22,13 @@
         <h2>{{ .Title }}</h2>
         
         <div class="action-panel">
-            <h3>Add New Partition</h3>
-            <form action="/partitions/add" method="POST">
+            <h3>Set Partition Size</h3>
+            <form action="/partitions/set-size" method="POST">
                 <div class="form-group">
-                    <label for="partition_id">Partition ID:</label>
-                    <input type="text" id="partition_id" name="partition_id" required>
+                    <label for="partition_count">Number of Partitions:</label>
+                    <input type="number" id="partition_count" name="partition_count" min="1" required>
                 </div>
-                <button type="submit" class="btn">Add Partition</button>
+                <button type="submit" class="btn">Update Partitions</button>
             </form>
         </div>
         
@@ -45,16 +45,22 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {{range .Partitions}}
+                    {{range $id, $partition := .Partitions}}
                     <tr>
-                        <td>{{.Id}}</td>
-                        <td><span class="status-{{.Status}}">{{.Status}}</span></td>
-                        <td>{{.MasterNodeId}}</td>
-                        <td>{{len .NodeIds}}</td>
+                        <td>{{$partition.Id}}</td>
                         <td>
-                            <a href="/partitions/{{.Id}}" class="btn-small">View Details</a>
+                            {{if $partition.IsMigrating}}
+                                <span class="status-migrating">Migrating</span>
+                            {{else}}
+                                <span class="status-normal">Normal</span>
+                            {{end}}
+                        </td>
+                        <td>{{$partition.MasterNodeId}}</td>
+                        <td>{{len $partition.NodeIds}}</td>
+                        <td>
+                            <a href="/partitions/{{$partition.Id}}" class="btn-small">View Details</a>
                             <form action="/partitions/remove" method="POST" class="inline-form">
-                                <input type="hidden" name="partition_id" value="{{.Id}}">
+                                <input type="hidden" name="partition_id" value="{{$partition.Id}}">
                                 <button type="submit" class="btn-small btn-danger">Remove</button>
                             </form>
                         </td>
