@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Script to manage distributed-kvstore nodes
 # Usage: ./manage-nodes.sh [add|remove|list] [options]
@@ -11,6 +11,7 @@ DEFAULT_NODE_PORT_START=12345
 DEFAULT_NODE_COUNT=1
 DEFAULT_NODE_NAME_PREFIX="node"
 DEFAULT_IMAGE_NAME="kvstore-node"
+DEFAULT_CONFIG_DIR="./config"
 
 # Function to display usage information
 show_usage() {
@@ -76,8 +77,9 @@ add_nodes() {
       --health-retries 3 \
       --health-start-period 5s \
       --restart unless-stopped \
+      -v "$(pwd)/${DEFAULT_CONFIG_DIR}:/app/config" \
       "$DEFAULT_IMAGE_NAME" \
-      ./kvstore servenode
+      ./kvstore servenode --config /app/config/node.yaml
     
     echo "Node $node_name started on port $port"
   done

@@ -81,6 +81,7 @@ The project includes a script to help manage nodes in a Docker environment. This
 ```
 
 Each node will automatically:
+
 1. Build the Docker image if it doesn't exist
 2. Run with a unique port and container name
 3. Register with the controller upon startup
