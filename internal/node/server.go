@@ -189,3 +189,24 @@ func (s *server) GetOperationsAfter(ctx context.Context, request database.GetOpe
 
 	return database.GetOperationsAfter200JSONResponse(operations), nil
 }
+
+// ApplyOperation implements the endpoint for applying operations to a replica
+func (s *server) ApplyOperation(ctx context.Context, request database.ApplyOperationRequestObject) (database.ApplyOperationResponseObject, error) {
+	if request.Body == nil {
+		return database.ApplyOperation400JSONResponse{
+			Error: "Missing operation in request body",
+		}, nil
+	}
+
+	partitionID := request.PartitionID
+	operation := *request.Body
+
+	err := s.nodeStore.ApplyOperation(partitionID, operation)
+	if err != nil {
+		return database.ApplyOperation400JSONResponse{
+			Error: err.Error(),
+		}, nil
+	}
+
+	return database.ApplyOperation200Response{}, nil
+}

@@ -268,3 +268,40 @@ paths:
                 type: array
                 items:
                   $ref: "../common/api.yaml#/components/schemas/Operation"
+  /partitions/{partitionID}/operations:
+    post:
+      operationId: applyOperation
+      x-go-name: ApplyOperation
+      summary: Apply an operation to a replica partition
+      parameters:
+        - name: partitionID
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the partition
+          x-go-name: PartitionID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "../common/api.yaml#/components/schemas/Operation"
+      responses:
+        "200":
+          description: Operation applied successfully
+          x-go-name: Success
+        "400":
+          description: Invalid operation
+          x-go-name: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          x-go-name: Error
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"

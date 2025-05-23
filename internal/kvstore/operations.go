@@ -2,6 +2,7 @@ package kvstore
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 
@@ -49,4 +50,32 @@ func (kv *KVStore) GetOperationsAfter(id int64) []common.Operation {
 	}
 
 	return ops
+}
+
+// applyOperation applies a single operation to the KVStore
+func (store *KVStore) applyOperation(op common.Operation) error {
+	// Apply the operation based on its type
+	switch op.Type {
+	case common.Set:
+		if !op.Value.IsSpecified() {
+			return fmt.Errorf("set operation requires a value")
+		}
+		value, err := op.Value.Get()
+		if err != nil {
+			return fmt.Errorf("failed to get value from operation")
+		}
+		store.store[op.Key] = value
+	case common.Delete:
+		delete(store.store, op.Key)
+	default:
+		return fmt.Errorf("unknown operation type: %s", op.Type)
+	}
+
+	// Add to operation log
+	store.opLog = append(store.opLog, op)
+	if op.ID >= store.nextOpID {
+		store.nextOpID = op.ID + 1
+	}
+
+	return nil
 }
