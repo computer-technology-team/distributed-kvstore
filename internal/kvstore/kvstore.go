@@ -1,7 +1,6 @@
 package kvstore
 
 import (
-	"net/http"
 	"sync"
 	"time"
 
@@ -9,15 +8,17 @@ import (
 )
 
 type KVStore struct {
-	mu             sync.RWMutex
-	store          map[string]string
-	IsMaster       bool
-	opLog          []kvstoreAPI.Operation
-	nextOpID       int64
+	mu sync.RWMutex
+
+	store map[string]string
+
+	opLog    []kvstoreAPI.Operation
+	nextOpID int64
+
+	isMaster       bool
 	masterAddr     string
-	SyncInterval   time.Duration
+	syncInterval   time.Duration
 	lastSyncedOpID int64
-	httpClient     *http.Client
 }
 
 func NewKVStore() *KVStore {

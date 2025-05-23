@@ -28,3 +28,9 @@ func (kv *KVStore) GetOperationsAfter(id int64) []kvstoreAPI.Operation {
 	}
 	return ops
 }
+
+func (kv *KVStore) GetLastOperationID() int64 {
+	kv.mu.RLock()
+	defer kv.mu.RUnlock()
+	return kv.nextOpID - 1
+}

@@ -2,8 +2,7 @@ package node
 
 import (
 	"context"
-	"log/slog"
-	"time"
+	"net/http"
 
 	kvstoreAPI "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
 	"github.com/computer-technology-team/distributed-kvstore/internal/kvstore"
@@ -32,8 +31,14 @@ func (s *server) PingServer(ctx context.Context, request kvstoreAPI.PingServerRe
 }
 
 func (s *server) GetValue(ctx context.Context, request kvstoreAPI.GetValueRequestObject) (kvstoreAPI.GetValueResponseObject, error) {
-	if !s.kvStore.IsMaster {
-		// return unauthorized
+	// If the node is not master, it could have old values of the key. We will defensively deny the request.
+	if !s.kvStore.IsMaster() {
+		return kvstoreAPI.GetValuedefaultJSONResponse{
+			Body: kvstoreAPI.ErrorResponse{
+				Error: "operation not permitted on non-master node",
+			},
+			StatusCode: http.StatusUnauthorized,
+		}, nil
 	}
 
 	key := request.Key
@@ -50,8 +55,13 @@ func (s *server) GetValue(ctx context.Context, request kvstoreAPI.GetValueReques
 }
 
 func (s *server) SetValue(ctx context.Context, request kvstoreAPI.SetValueRequestObject) (kvstoreAPI.SetValueResponseObject, error) {
-	if !s.kvStore.IsMaster {
-		// return unauthorized
+	if !s.kvStore.IsMaster() {
+		return kvstoreAPI.SetValuedefaultJSONResponse{
+			Body: kvstoreAPI.ErrorResponse{
+				Error: "operation not permitted on non-master node",
+			},
+			StatusCode: http.StatusUnauthorized,
+		}, nil
 	}
 
 	key := request.Key
@@ -66,8 +76,13 @@ func (s *server) SetValue(ctx context.Context, request kvstoreAPI.SetValueReques
 }
 
 func (s *server) DeleteKey(ctx context.Context, request kvstoreAPI.DeleteKeyRequestObject) (kvstoreAPI.DeleteKeyResponseObject, error) {
-	if !s.kvStore.IsMaster {
-		// return unauthorized
+	if !s.kvStore.IsMaster() {
+		return kvstoreAPI.DeleteKeydefaultJSONResponse{
+			Body: kvstoreAPI.ErrorResponse{
+				Error: "operation not permitted on non-master node",
+			},
+			StatusCode: http.StatusUnauthorized,
+		}, nil
 	}
 
 	key := request.Key
@@ -98,74 +113,4 @@ func (s *server) GetOperation(ctx context.Context, request kvstoreAPI.GetOperati
 func (s *server) SyncOperations(ctx context.Context, request kvstoreAPI.SyncOperationsRequestObject) (kvstoreAPI.SyncOperationsResponseObject, error) {
 	ops := s.kvStore.GetOperationsAfter(request.LastOpId)
 	return kvstoreAPI.SyncOperations200JSONResponse(ops), nil
-}
-
-func (s *server) startBackgroundSync() {
-	ctx, cancel := context.WithCancel(context.Background())
-	s.cancelSync = cancel
-
-	go func() {
-		ticker := time.NewTicker(s.kvStore.SyncInterval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				s.syncWithMaster()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-}
-
-func (s *server) Stop() {
-	if s.cancelSync != nil {
-		s.cancelSync()
-	}
-}
-
-func (s *server) syncWithMaster() {
-	lastOpID := s.kvStore.GetLastSyncedOpID()
-
-	// Get operations from master
-	client, err := kvstoreAPI.NewClientWithResponses(s.kvStore.MasterAddr)
-	if err != nil {
-		slog.Info("Failed to create client for master: %v", err)
-		return
-	}
-
-	resp, err := client.SyncOperationsWithResponse(context.Background(), lastOpID)
-	if err != nil {
-		slog.Info("Failed to sync operations: %v", err)
-		return
-	}
-
-	if resp.JSON200 != nil {
-		s.applyOperations(*resp.JSON200)
-	}
-}
-
-func (s *server) applyOperations(ops []kvstoreAPI.Operation) {
-	s.kvStore.mu.Lock()
-	defer s.kvStore.mu.Unlock()
-
-	for _, op := range ops {
-		switch op.Type {
-		case "set":
-			s.kvStore.store[op.Key] = op.Value
-		case "delete":
-			delete(s.kvStore.store, op.Key)
-		}
-
-		// Update operation log
-		s.kvStore.opLog = append(s.kvStore.opLog, Operation{
-			ID:    op.Id,
-			Type:  OperationType(op.Type),
-			Key:   op.Key,
-			Value: op.Value,
-		})
-
-		s.kvStore.lastSyncedOpID = op.Id
-	}
 }
