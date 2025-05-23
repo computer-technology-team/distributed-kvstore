@@ -169,33 +169,6 @@ func (c *Controller) SetPartitionCount(partitionCount int) error {
 	return nil
 }
 
-// findVirtualNodeIndex finds the index of a virtual node with the given hash
-func (c *Controller) findVirtualNodeIndex(hash int64) int {
-	for i, vnode := range c.state.VirtualNodes {
-		if vnode.Hash == hash {
-			return i
-		}
-	}
-	return -1
-}
-
-// validatePartitionCreation checks if partition can be created
-func (c *Controller) validatePartitionCreation(partitionID string) error {
-	if len(c.state.Nodes) == 0 {
-		return errors.New("no available nodes")
-	}
-
-	if _, exists := c.state.Partitions[partitionID]; exists {
-		return errors.New("partition id exist")
-	}
-
-	if c.state.Partitions == nil {
-		c.state.Partitions = make(map[string]common.Partition)
-	}
-
-	return nil
-}
-
 // getAllNodesForPartition returns all nodes for the first partition
 func (c *Controller) getAllNodesForPartition() ([]openapi_types.UUID, []common.Node) {
 	nodeIDs := make([]openapi_types.UUID, len(c.state.Nodes))
