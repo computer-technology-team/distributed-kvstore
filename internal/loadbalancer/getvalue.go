@@ -38,8 +38,8 @@ func (s *server) GetValue(ctx context.Context,
 
 	// Filter healthy replicas
 	healthyReplicas := lo.Filter(replicaNodes, func(node common.Node, _ int) bool {
-		partitionRole, exists := node.Partitions[partition.Id]
-		return exists && partitionRole.Status == common.Healthy
+		_, exists := node.Partitions[partition.Id]
+		return exists && node.Status == common.Healthy
 	})
 
 	if len(healthyReplicas) == 0 {

@@ -52,6 +52,17 @@ func (s *server) DeleteKey(ctx context.Context,
 		}, nil
 	}
 
+	if masterNode.Status != common.Healthy {
+		slog.ErrorContext(ctx, "master partition not healthy", "method", "delete",
+			"partition_id", partition.Id, "node_id", masterNode.Id)
+		return kvstoreAPI.DeleteKeydefaultJSONResponse{
+			Body: common.ErrorResponse{
+				Error: "master partition not healthy",
+			},
+			StatusCode: http.StatusServiceUnavailable,
+		}, nil
+	}
+
 	partitionRole, exists := masterNode.Partitions[partition.Id]
 	if !exists || !partitionRole.IsMaster {
 		slog.ErrorContext(ctx, "node is not master for this partition", "method", "delete",
@@ -61,17 +72,6 @@ func (s *server) DeleteKey(ctx context.Context,
 				Error: "node is not master for this partition",
 			},
 			StatusCode: http.StatusInternalServerError,
-		}, nil
-	}
-
-	if partitionRole.Status != common.Healthy {
-		slog.ErrorContext(ctx, "master partition not healthy", "method", "delete",
-			"partition_id", partition.Id, "node_id", masterNode.Id)
-		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: common.ErrorResponse{
-				Error: "master partition not healthy",
-			},
-			StatusCode: http.StatusServiceUnavailable,
 		}, nil
 	}
 

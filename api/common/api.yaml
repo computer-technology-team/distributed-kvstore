@@ -6,9 +6,14 @@ components:
   schemas:
     Status:
       type: string
-      description: Health status of a partition
+      description: Health status of a node
       enum: [healthy, unhealthy, uninitialized]
       example: "healthy"
+    MigrationStatus:
+      type: string
+      description: Status of data migration for a hash range
+      enum: [not_started, in_progress, completed, failed]
+      example: "in_progress"
     State:
       type: object
       required:
@@ -17,6 +22,7 @@ components:
         - unRegisteredNodes
         - virtualNodes
         - replicaCount
+        - isResharding
       properties:
         partitions:
           type: object
@@ -37,20 +43,63 @@ components:
         virtualNodes:
           type: array
           description: >-
-            Array of virtual nodes used for consistent hashing across all partitions
+            Array of virtual nodes used for consistent hashing
           items:
             $ref: "#/components/schemas/VirtualNode"
         replicaCount:
           type: integer
           format: int
           description: number of replicas each partition should have
+        isResharding:
+          type: boolean
+          description: Whether the cluster is currently in re-sharding mode
+          default: false
+          x-go-name: IsResharding
+        migrationRanges:
+          type: array
+          description: Hash ranges that need to be migrated during re-sharding
+          items:
+            $ref: "#/components/schemas/MigrationRange"
+    MigrationRange:
+      type: object
+      required:
+        - id
+        - rangeStart
+        - rangeEnd
+        - sourcePartitionId
+        - targetPartitionId
+        - status
+      properties:
+        id:
+          type: string
+          description: Unique identifier for this migration range
+          format: uuid
+        rangeStart:
+          type: integer
+          format: int64
+          description: Start of the hash range (exclusive)
+        rangeEnd:
+          type: integer
+          format: int64
+          description: End of the hash range (inclusive)
+        progress:
+          type: integer
+          format: int64
+          description: The last status Pointer of migrated progress
+        sourcePartitionId:
+          type: string
+          description: Source partition ID for migration
+        targetPartitionId:
+          type: string
+          description: Target partition ID for migration
+        status:
+          $ref: "#/components/schemas/MigrationStatus"
     Partition:
       type: object
       required:
         - id
         - nodeIds
         - masterNodeId
-        - status
       properties:
         id:
           type: string
@@ -70,14 +119,18 @@ components:
           description: >-
             ID of the node that is currently the master for this partition
           example: "123e4567-e89b-12d3-a456-426614174000"
-        status:
-          $ref: "#/components/schemas/Status"
+        isMigrating:
+          type: boolean
+          description: Whether this partition is involved in migration
+          default: false
+          x-go-name: IsMigrating
     Node:
       type: object
       required:
         - id
         - address
         - partitions
+        - status
       properties:
         id:
           type: string
@@ -88,26 +141,29 @@ components:
           type: string
           description: Network address of the node
           example: "192.168.1.10:8080"
+        status:
+          $ref: "#/components/schemas/Status"
+          description: Health status of the node
         partitions:
           type: object
           description: Map of partition IDs to role information for this node
           additionalProperties:
             $ref: "#/components/schemas/PartitionRole"
+        activeMigrations:
+          type: array
+          description: Migration range IDs this node is currently handling
+          items:
+            type: string
     PartitionRole:
       type: object
       required:
         - isMaster
-        - status
         - isSyncing
       properties:
         isMaster:
           type: boolean
-          description: Whether this node should be the master for this partition
+          description: Whether this node is the master for this partition
           x-go-name: IsMaster
-        status:
-          $ref: "#/components/schemas/Status"
-          description: Health status of the partition on this node
-          x-go-name: Status
         isSyncing:
           type: boolean
           description: Whether this partition is currently syncing data
@@ -134,6 +190,8 @@ components:
           type: string
           description: ID of the partition this virtual node belongs to
           example: "partition-1"
+          format: int64
+    # Key-Value operation schemas
     KeyValuePair:
       type: object
       required:
@@ -221,7 +279,6 @@ components:
         - id
         - type
         - key
-        - value
       properties:
         id:
           type: integer
@@ -242,3 +299,8 @@ components:
           description: Value for set operations (optional for delete)
           nullable: true
           x-go-name: Value
+        partitionId:
+          type: string
+          description: Partition ID where this operation was applied
+          nullable: true
+          x-go-name: PartitionId

@@ -30,7 +30,7 @@ type NodeRegistrationResponse struct {
 	// Id Assigned unique identifier for the node
 	Id openapi_types.UUID `json:"id"`
 
-	// Status Health status of a partition
+	// Status Health status of a node
 	Status externalRef0.Status `json:"status"`
 }
 

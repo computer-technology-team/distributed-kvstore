@@ -64,7 +64,7 @@ func (s *server) SetValue(ctx context.Context,
 		}, nil
 	}
 
-	if partitionRole.Status != common.Healthy {
+	if masterReplica.Status != common.Healthy {
 		slog.ErrorContext(ctx, "master partition not healthy", "method", "set",
 			"partition_id", partition.Id, "node_id", masterReplica.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{

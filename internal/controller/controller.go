@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -37,6 +38,53 @@ type Controller struct {
 func (c *Controller) AddPartition(partitionID string) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	// Validate inputs and initialize if needed
+	if err := c.validatePartitionCreation(partitionID); err != nil {
+		return err
+	}
+
+	// Determine which nodes will host the partition
+	var nodeIDs []openapi_types.UUID
+	var partitionNodes []common.Node
+
+	if len(c.state.Partitions) == 0 {
+		// First partition: assign to all nodes
+		nodeIDs, partitionNodes = c.getAllNodesForPartition()
+	} else {
+		// Subsequent partitions: distribute based on load
+		nodeIDs, partitionNodes = c.selectNodesForPartition()
+	}
+
+	// Create the partition and assign it to nodes
+	c.createPartition(partitionID, nodeIDs[0], nodeIDs)
+	c.assignPartitionToNodes(partitionID, partitionNodes)
+
+	// Generate virtual nodes for the partition
+	if err := c.generateVirtualNodesForPartition(partitionID, c.virtualNodeCount); err != nil {
+		slog.Error("failed to generate virtual nodes for partition", "error", err)
+		return err
+	}
+
+	// Create a deep copy of the state while still holding the lock
+	stateCopy := deepcopy.Copy(c.state).(common.State)
+
+	// Create node state updates while still holding the lock
+	nodeStateUpdates := lo.Map(nodeIDs, func(nodeID openapi_types.UUID, _ int) lo.Tuple2[openapi_types.UUID, database.NodeState] {
+		return lo.T2(nodeID, stateCopy)
+	})
+
+	// Dispatch state updates in a goroutine
+	go func() {
+		c.dispatchNodeState(nodeStateUpdates)
+		c.dispatchState()
+	}()
+
+	return nil
+}
+
+// validatePartitionCreation checks if partition can be created
+func (c *Controller) validatePartitionCreation(partitionID string) error {
 	if len(c.state.Nodes) == 0 {
 		return errors.New("no available nodes")
 	}
@@ -49,53 +97,68 @@ func (c *Controller) AddPartition(partitionID string) error {
 		c.state.Partitions = make(map[string]common.Partition)
 	}
 
-	if len(c.state.Partitions) == 0 {
-		// Initialize partitions map for each node
-		for i := range c.state.Nodes {
-			if c.state.Nodes[i].Partitions == nil {
-				c.state.Nodes[i].Partitions = map[string]common.PartitionRole{}
-			}
-			role := common.PartitionRole{
-				IsMaster: i == 0,
-				Status:   common.Healthy,
-			}
+	return nil
+}
 
-			c.state.Nodes[i].Partitions[partitionID] = role
-		}
-
-		updatedNodeIds := make([]openapi_types.UUID, len(c.state.Nodes))
-		for i, node := range c.state.Nodes {
-			updatedNodeIds[i] = node.Id
-		}
-
-		c.state.Partitions[partitionID] = common.Partition{
-			Id:           partitionID,
-			MasterNodeId: c.state.Nodes[0].Id,
-			NodeIds:      updatedNodeIds,
-			Status:       common.Healthy,
-		}
-
-		err := c.generateVirtualNodesForPartition(partitionID, c.virtualNodeCount)
-		if err != nil {
-			slog.Error("failed to generate virtual nodes for partition", "error", err)
-			return err
-		}
-
-		// Create a deep copy of the state to avoid race conditions
-		stateCopy := deepcopy.Copy(c.state).(common.State)
-
-		nodeStateUpdates := lo.Map(updatedNodeIds, func(nodeID openapi_types.UUID, _ int) lo.Tuple2[openapi_types.UUID, database.NodeState] {
-			return lo.T2(nodeID, stateCopy)
-		})
-
-		go func() {
-			c.dispatchNodeState(nodeStateUpdates)
-			c.dispatchState()
-		}()
-		return nil
+// getAllNodesForPartition returns all nodes for the first partition
+func (c *Controller) getAllNodesForPartition() ([]openapi_types.UUID, []common.Node) {
+	nodeIDs := make([]openapi_types.UUID, len(c.state.Nodes))
+	for i, node := range c.state.Nodes {
+		nodeIDs[i] = node.Id
 	}
+	return nodeIDs, c.state.Nodes
+}
 
-	return errors.New("unimplemented")
+// selectNodesForPartition selects nodes for a new partition based on load balancing
+func (c *Controller) selectNodesForPartition() ([]openapi_types.UUID, []common.Node) {
+	currentPartitionCount := len(c.state.Partitions)
+	currentNodeCount := len(c.state.Nodes)
+	maxNodePartitions := int(math.Round(float64(currentPartitionCount) / float64(currentNodeCount)))
+
+	candidateNodes := lo.Filter(c.state.Nodes, func(n common.Node, _ int) bool {
+		return len(n.Partitions) < maxNodePartitions
+	})
+
+	partitionNodes := lo.Samples(candidateNodes, c.state.ReplicaCount+1)
+	partitionNodesIDs := lo.Map(partitionNodes, func(n common.Node, _ int) openapi_types.UUID {
+		return n.Id
+	})
+
+	return partitionNodesIDs, partitionNodes
+}
+
+// createPartition creates a new partition in the state
+func (c *Controller) createPartition(partitionID string, masterNodeID openapi_types.UUID, nodeIDs []openapi_types.UUID) {
+	c.state.Partitions[partitionID] = common.Partition{
+		Id:           partitionID,
+		MasterNodeId: masterNodeID,
+		NodeIds:      nodeIDs,
+	}
+}
+
+// assignPartitionToNodes assigns a partition to the selected nodes
+func (c *Controller) assignPartitionToNodes(partitionID string, nodes []common.Node) {
+	for i := range nodes {
+		// Initialize partitions map if needed
+		if nodes[i].Partitions == nil {
+			nodes[i].Partitions = map[string]common.PartitionRole{}
+		}
+
+		// Create partition role
+		role := common.PartitionRole{
+			IsMaster:  i == 0,
+			IsSyncing: len(c.state.Partitions) > 1, // Only set syncing for non-first partitions
+		}
+
+		// Assign role to nodes[i]
+		nodes[i].Partitions[partitionID] = role
+	}
+}
+
+// dispatchUpdates dispatches state updates to affected nodes and load balancer
+func (c *Controller) dispatchUpdates(nodeStateUpdates []lo.Tuple2[openapi_types.UUID, database.NodeState]) {
+	c.dispatchNodeState(nodeStateUpdates)
+	c.dispatchState()
 }
 
 func (c *Controller) RemoveNode(nodeID string) error {
@@ -205,7 +268,6 @@ func (c *Controller) updateNodePartitionsStatus(node *common.Node, status common
 	for partitionID := range node.Partitions {
 		node.Partitions[partitionID] = common.PartitionRole{
 			IsMaster: node.Partitions[partitionID].IsMaster,
-			Status:   status,
 		}
 	}
 }

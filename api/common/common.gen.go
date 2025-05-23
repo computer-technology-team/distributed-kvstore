@@ -8,6 +8,14 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for MigrationStatus.
+const (
+	Completed  MigrationStatus = "completed"
+	Failed     MigrationStatus = "failed"
+	InProgress MigrationStatus = "in_progress"
+	NotStarted MigrationStatus = "not_started"
+)
+
 // Defines values for OperationType.
 const (
 	Delete OperationType = "delete"
@@ -60,8 +68,38 @@ type KeyValueResponse struct {
 	Value nullable.Nullable[string] `json:"value"`
 }
 
+// MigrationRange defines model for MigrationRange.
+type MigrationRange struct {
+	// Id Unique identifier for this migration range
+	Id openapi_types.UUID `json:"id"`
+
+	// Progress The last status Pointer of migrated progress
+	Progress *int64 `json:"progress,omitempty"`
+
+	// RangeEnd End of the hash range (inclusive)
+	RangeEnd int64 `json:"rangeEnd"`
+
+	// RangeStart Start of the hash range (exclusive)
+	RangeStart int64 `json:"rangeStart"`
+
+	// SourcePartitionId Source partition ID for migration
+	SourcePartitionId string `json:"sourcePartitionId"`
+
+	// Status Status of data migration for a hash range
+	Status MigrationStatus `json:"status"`
+
+	// TargetPartitionId Target partition ID for migration
+	TargetPartitionId string `json:"targetPartitionId"`
+}
+
+// MigrationStatus Status of data migration for a hash range
+type MigrationStatus string
+
 // Node defines model for Node.
 type Node struct {
+	// ActiveMigrations Migration range IDs this node is currently handling
+	ActiveMigrations *[]string `json:"activeMigrations,omitempty"`
+
 	// Address Network address of the node
 	Address string `json:"address"`
 
@@ -70,6 +108,9 @@ type Node struct {
 
 	// Partitions Map of partition IDs to role information for this node
 	Partitions map[string]PartitionRole `json:"partitions"`
+
+	// Status Health status of a node
+	Status Status `json:"status"`
 }
 
 // Operation defines model for Operation.
@@ -80,11 +121,14 @@ type Operation struct {
 	// Key Key affected by the operation
 	Key string `json:"key"`
 
+	// PartitionId Partition ID where this operation was applied
+	PartitionId nullable.Nullable[string] `json:"partitionId,omitempty"`
+
 	// Type Type of operation
 	Type OperationType `json:"type"`
 
 	// Value Value for set operations (optional for delete)
-	Value nullable.Nullable[string] `json:"value"`
+	Value nullable.Nullable[string] `json:"value,omitempty"`
 }
 
 // OperationType Type of operation
@@ -95,26 +139,23 @@ type Partition struct {
 	// Id Unique identifier for the partition
 	Id string `json:"id"`
 
+	// IsMigrating Whether this partition is involved in migration
+	IsMigrating *bool `json:"isMigrating,omitempty"`
+
 	// MasterNodeId ID of the node that is currently the master for this partition
 	MasterNodeId openapi_types.UUID `json:"masterNodeId"`
 
 	// NodeIds List of node IDs that host this partition
 	NodeIds []openapi_types.UUID `json:"nodeIds"`
-
-	// Status Health status of a partition
-	Status Status `json:"status"`
 }
 
 // PartitionRole defines model for PartitionRole.
 type PartitionRole struct {
-	// IsMaster Whether this node should be the master for this partition
+	// IsMaster Whether this node is the master for this partition
 	IsMaster bool `json:"isMaster"`
 
 	// IsSyncing Whether this partition is currently syncing data
 	IsSyncing bool `json:"isSyncing"`
-
-	// Status Health status of a partition
-	Status Status `json:"status"`
 }
 
 // SetValueRequest defines model for SetValueRequest.
@@ -125,6 +166,12 @@ type SetValueRequest struct {
 
 // State defines model for State.
 type State struct {
+	// IsResharding Whether the cluster is currently in re-sharding mode
+	IsResharding bool `json:"isResharding"`
+
+	// MigrationRanges Hash ranges that need to be migrated during re-sharding
+	MigrationRanges *[]MigrationRange `json:"migrationRanges,omitempty"`
+
 	// Nodes Array of active nodes in the cluster
 	Nodes []Node `json:"nodes"`
 
@@ -137,11 +184,11 @@ type State struct {
 	// UnRegisteredNodes Array of nodes that have not been fully registered
 	UnRegisteredNodes []Node `json:"unRegisteredNodes"`
 
-	// VirtualNodes Array of virtual nodes used for consistent hashing across all partitions
+	// VirtualNodes Array of virtual nodes used for consistent hashing
 	VirtualNodes []VirtualNode `json:"virtualNodes"`
 }
 
-// Status Health status of a partition
+// Status Health status of a node
 type Status string
 
 // VirtualNode defines model for VirtualNode.
