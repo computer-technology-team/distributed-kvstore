@@ -11,23 +11,18 @@ import (
 	"github.com/samber/lo"
 )
 
-// KVStore represents a single key-value store for a partition
+// KVStore represents a single key-value store for a partition with its status
 type KVStore struct {
-	mu    sync.RWMutex
-	store map[string]string // Regular map for key-value pairs
-}
-
-// StoreStatus represents the status of a partition store
-type StoreStatus struct {
-	IsMaster  bool // Whether this node is the master for this partition
-	IsSyncing bool // Whether this partition is currently syncing
+	mu        sync.RWMutex
+	store     map[string]string // Regular map for key-value pairs
+	isMaster  bool              // Whether this node is the master for this partition
+	isSyncing bool              // Whether this partition is currently syncing
 }
 
 // NodeStore manages multiple KVStores for different partitions
 type NodeStore struct {
 	mu          sync.RWMutex
 	stores      map[string]*KVStore       // Map of partitionID to KVStore
-	storeStatus map[string]StoreStatus    // Map of partitionID to store status
 	lastUpdated atomic.Pointer[time.Time] // Last updated timestamp
 }
 
@@ -35,8 +30,7 @@ type NodeStore struct {
 func NewNodeStore() *NodeStore {
 	t := time.Now()
 	ns := &NodeStore{
-		stores:      make(map[string]*KVStore),
-		storeStatus: make(map[string]StoreStatus),
+		stores: make(map[string]*KVStore),
 	}
 	ns.lastUpdated.Store(&t)
 	return ns
@@ -45,7 +39,9 @@ func NewNodeStore() *NodeStore {
 // newKVStoreInstance creates a new KVStore instance
 func newKVStoreInstance() *KVStore {
 	return &KVStore{
-		store: make(map[string]string),
+		store:     make(map[string]string),
+		isMaster:  false,
+		isSyncing: false,
 	}
 }
 
@@ -61,17 +57,14 @@ func (ns *NodeStore) SetState(state database.NodeState) error {
 
 	// Add new partitions
 	for _, partitionID := range toBeAdded {
-		ns.stores[partitionID] = newKVStoreInstance()
-		ns.storeStatus[partitionID] = StoreStatus{
-			IsMaster:  state.Partitions[partitionID].IsMaster,
-			IsSyncing: false, // Default to not syncing for new partitions
-		}
+		store := newKVStoreInstance()
+		store.isMaster = state.Partitions[partitionID].IsMaster
+		ns.stores[partitionID] = store
 	}
 
 	// Remove partitions that are no longer assigned to this node
 	for _, partitionID := range toBeRemoved {
 		delete(ns.stores, partitionID)
-		delete(ns.storeStatus, partitionID)
 	}
 
 	return nil
@@ -85,18 +78,16 @@ func (ns *NodeStore) Set(partitionID string, key, value string) error {
 		ns.mu.RUnlock()
 		return fmt.Errorf("partition %s not found", partitionID)
 	}
-
-	status := ns.storeStatus[partitionID]
 	ns.mu.RUnlock()
-
-	// Only allow writes to master partitions
-	if !status.IsMaster {
-		return fmt.Errorf("partition %s is not the master", partitionID)
-	}
 
 	// Acquire write lock for this specific KVStore
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
+	// Only allow writes to master partitions
+	if !store.isMaster {
+		return fmt.Errorf("partition %s is not the master", partitionID)
+	}
 
 	// Set the value in the store
 	store.store[key] = value
@@ -107,11 +98,11 @@ func (ns *NodeStore) Set(partitionID string, key, value string) error {
 func (ns *NodeStore) Get(partitionID string, key string) (string, bool, error) {
 	ns.mu.RLock()
 	store, exists := ns.stores[partitionID]
-	ns.mu.RUnlock()
-
 	if !exists {
+		ns.mu.RUnlock()
 		return "", false, fmt.Errorf("partition %s not found", partitionID)
 	}
+	ns.mu.RUnlock()
 
 	// Acquire read lock for this specific KVStore
 	store.mu.RLock()
@@ -134,18 +125,16 @@ func (ns *NodeStore) Delete(partitionID string, key string) (bool, error) {
 		ns.mu.RUnlock()
 		return false, fmt.Errorf("partition %s not found", partitionID)
 	}
-
-	status := ns.storeStatus[partitionID]
 	ns.mu.RUnlock()
-
-	// Only allow writes to master partitions
-	if !status.IsMaster {
-		return false, fmt.Errorf("partition %s is not the master", partitionID)
-	}
 
 	// Acquire write lock for this specific KVStore
 	store.mu.Lock()
 	defer store.mu.Unlock()
+
+	// Only allow writes to master partitions
+	if !store.isMaster {
+		return false, fmt.Errorf("partition %s is not the master", partitionID)
+	}
 
 	// Check if the key exists before deleting
 	_, exists = store.store[key]
@@ -163,12 +152,14 @@ func (ns *NodeStore) GetPartitionRoles() map[string]common.PartitionRole {
 	defer ns.mu.RUnlock()
 
 	partitions := make(map[string]common.PartitionRole)
-	for partitionID, status := range ns.storeStatus {
+	for partitionID, store := range ns.stores {
+		store.mu.RLock()
 		partitions[partitionID] = common.PartitionRole{
-			IsMaster:  status.IsMaster,
-			IsSyncing: status.IsSyncing,
+			IsMaster:  store.isMaster,
+			IsSyncing: store.isSyncing,
 			Status:    common.Healthy,
 		}
+		store.mu.RUnlock()
 	}
 
 	return partitions
