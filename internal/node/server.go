@@ -27,6 +27,8 @@ func NewServer(id types.UUID) database.StrictServerInterface {
 
 // Database API implementation
 func (s *server) GetClusterState(ctx context.Context, request database.GetClusterStateRequestObject) (database.GetClusterStateResponseObject, error) {
+	slog.Info("GetClusterState called")
+
 	state := s.nodeStore.GetState()
 
 	return database.GetClusterState200JSONResponse(state), nil
@@ -34,6 +36,8 @@ func (s *server) GetClusterState(ctx context.Context, request database.GetCluste
 
 // UpdateNodeState implements database.StrictServerInterface.
 func (s *server) UpdateNodeState(ctx context.Context, request database.UpdateNodeStateRequestObject) (database.UpdateNodeStateResponseObject, error) {
+	slog.Info("UpdateNodeState called", "request", request.Body)
+
 	if request.Body == nil {
 		slog.Error("request body is nil")
 		return database.UpdateNodeState400JSONResponse{Error: "request body is nil"}, nil
@@ -53,6 +57,8 @@ func (s *server) GetValueFromPartition(ctx context.Context, request database.Get
 	partitionID := request.PartitionID
 	key := request.Key
 
+	slog.Info("GetValueFromPartition called", "partitionID", partitionID, "key", key)
+
 	// Get the value directly from the specified partition
 	if value, exists, err := s.nodeStore.Get(partitionID, key); err == nil && exists {
 		return database.GetValueFromPartition200JSONResponse{
@@ -70,16 +76,21 @@ func (s *server) SetValueInPartition(ctx context.Context, request database.SetVa
 	partitionID := request.PartitionID
 	key := request.Key
 
+	slog.Info("SetValueInPartition called", "partitionID", partitionID, "key", key)
+
 	if request.Body == nil {
+		slog.Error("Missing request body", "partitionID", partitionID, "key", key)
 		return database.SetValueInPartition400JSONResponse{
 			Error: "Missing request body",
 		}, nil
 	}
 
 	value := request.Body.Value
+	slog.Info("SetValueInPartition details", "partitionID", partitionID, "key", key, "value", value)
 
 	// Set the value directly in the specified partition
 	if err := s.nodeStore.Set(partitionID, key, value); err != nil {
+		slog.Error("Failed to set value", "partitionID", partitionID, "key", key, "error", err)
 		return database.SetValueInPartition400JSONResponse{
 			Error: err.Error(),
 		}, nil
@@ -95,14 +106,18 @@ func (s *server) DeleteKeyFromPartition(ctx context.Context, request database.De
 	partitionID := request.PartitionID
 	key := request.Key
 
+	slog.Info("DeleteKeyFromPartition called", "partitionID", partitionID, "key", key)
+
 	deleted, err := s.nodeStore.Delete(partitionID, key)
 	if err != nil {
+		slog.Error("Failed to delete key", "partitionID", partitionID, "key", key, "error", err)
 		return database.DeleteKeyFromPartition500JSONResponse{
 			Error: err.Error(),
 		}, nil
 	}
 
 	if !deleted {
+		slog.Info("Key not found for deletion", "partitionID", partitionID, "key", key)
 		return database.DeleteKeyFromPartition404JSONResponse{
 			Error: "Key not found in partition",
 		}, nil
@@ -117,6 +132,8 @@ func (s *server) DeleteKeyFromPartition(ctx context.Context, request database.De
 func (s *server) GetOperation(ctx context.Context, request database.GetOperationRequestObject) (database.GetOperationResponseObject, error) {
 	partitionId := request.PartitionID
 	operationId := request.OperationID
+
+	slog.Info("GetOperation called", "partitionID", partitionId, "operationID", operationId)
 
 	operation, err := s.nodeStore.GetOperation(partitionId, operationId)
 	if err != nil {
@@ -155,6 +172,8 @@ func (s *server) GetOperation(ctx context.Context, request database.GetOperation
 func (s *server) GetOperationsAfter(ctx context.Context, request database.GetOperationsAfterRequestObject) (database.GetOperationsAfterResponseObject, error) {
 	partitionId := request.PartitionID
 	lastOperationId := request.LastOperationID
+
+	slog.Info("GetOperationsAfter called", "partitionID", partitionId, "lastOperationID", lastOperationId)
 
 	operations, err := s.nodeStore.GetOperations(partitionId, lastOperationId)
 	if err != nil {

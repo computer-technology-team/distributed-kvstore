@@ -303,7 +303,7 @@ func (c *Controller) StartWatcher() {
 }
 
 func (c *Controller) startWorker() {
-	c.ticker = time.NewTicker(5 * time.Second)
+	c.ticker = time.NewTicker(c.healthCheckInterval)
 	for {
 		select {
 		case <-c.ticker.C:
@@ -328,6 +328,8 @@ func (c *Controller) updateNodePartitionsStatus(node *common.Node, status common
 	if node.Partitions == nil {
 		return
 	}
+
+	node.Status = status
 
 	for partitionID := range node.Partitions {
 		node.Partitions[partitionID] = common.PartitionRole{
