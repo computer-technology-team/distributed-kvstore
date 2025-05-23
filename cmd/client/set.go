@@ -29,7 +29,7 @@ func NewSetCmd() *cobra.Command {
 				return err
 			}
 
-			resp, err := client.SetValueWithResponse(ctx, key, kvstore.SetRequest{
+			resp, err := client.SetValueWithResponse(ctx, key, kvstore.SetValueJSONRequestBody{
 				Value: value,
 			})
 

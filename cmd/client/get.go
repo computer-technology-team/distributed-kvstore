@@ -45,7 +45,7 @@ func NewGetCmd() *cobra.Command {
 				return fmt.Errorf("unexpected status code: %d", resp.StatusCode())
 			}
 
-			fmt.Printf("Value for key '%s': '%s'\n", key, resp.JSON200.Value)
+			fmt.Printf("Value for key '%s': '%s'\n", key, resp.JSON200.Value.MustGet())
 			return nil
 		},
 	}

@@ -1,32 +1,29 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Minimal ping API server
+  title: Distributed Key-Value Store API
 components:
   schemas:
     Status:
       type: string
-      description: Current status of a node or replica
-      enum: [healthy, unhealthy, syncing, uninitialized, unregistered]
+      description: Health status of a partition
+      enum: [healthy, unhealthy, uninitialized]
       example: "healthy"
     State:
       type: object
       required:
         - partitions
-        - virtualNodes
         - nodes
         - unRegisteredNodes
+        - virtualNodes
+        - replicaCount
       properties:
         partitions:
           type: object
-          description: Map of partitions in the distributed key-value store, keyed by partition ID
+          description: >-
+            Map of partitions in the distributed key-value store, keyed by partition ID
           additionalProperties:
             $ref: "#/components/schemas/Partition"
-        virtualNodes:
-          type: array
-          description: Array of virtual nodes used for consistent hashing
-          items:
-            $ref: "#/components/schemas/VirtualNode"
         nodes:
           type: array
           description: Array of active nodes in the cluster
@@ -37,46 +34,42 @@ components:
           description: Array of nodes that have not been fully registered
           items:
             $ref: "#/components/schemas/Node"
+        virtualNodes:
+          type: array
+          description: >-
+            Array of virtual nodes used for consistent hashing across all partitions
+          items:
+            $ref: "#/components/schemas/VirtualNode"
+        replicaCount:
+          type: integer
+          format: int
+          description: number of replicas each partition should have
     Partition:
       type: object
       required:
         - id
-        - replicaIds
-        - masterReplicaId
+        - nodeIds
+        - masterNodeId
+        - status
       properties:
         id:
           type: string
           description: Unique identifier for the partition
           example: "partition-1"
-        replicaIds:
+        nodeIds:
           type: array
-          description: List of replica IDs for this partition
+          description: List of node IDs that host this partition
           items:
             type: string
             format: uuid
-            description: Unique identifier for a replica
+            description: Unique identifier for a node
             example: "123e4567-e89b-12d3-a456-426614174000"
-        masterReplicaId:
+        masterNodeId:
           type: string
           format: uuid
           description: >-
-            ID of the replica that is currently the master for this partition
-    Replica:
-      type: object
-      required:
-        - id
-        - address
-        - status
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Unique identifier for the node
+            ID of the node that is currently the master for this partition
           example: "123e4567-e89b-12d3-a456-426614174000"
-        address:
-          type: string
-          description: Network address of the replica
-          example: "192.168.1.10:8080"
         status:
           $ref: "#/components/schemas/Status"
     Node:
@@ -84,7 +77,7 @@ components:
       required:
         - id
         - address
-        - status
+        - partitions
       properties:
         id:
           type: string
@@ -95,15 +88,31 @@ components:
           type: string
           description: Network address of the node
           example: "192.168.1.10:8080"
-        status:
-          $ref: "#/components/schemas/Status"
-        partitionID:
-          type: string
-          description: ID of the partition this node belongs to (if any)
+        partitions:
+          type: object
+          description: Map of partition IDs to role information for this node
+          additionalProperties:
+            $ref: "#/components/schemas/PartitionRole"
+    PartitionRole:
+      type: object
+      required:
+        - isMaster
+        - status
+        - isSyncing
+      properties:
         isMaster:
           type: boolean
-          description: Whether this node is the master for its replica
+          description: Whether this node should be the master for this partition
+          x-go-name: IsMaster
+        status:
+          $ref: "#/components/schemas/Status"
+          description: Health status of the partition on this node
+          x-go-name: Status
+        isSyncing:
+          type: boolean
+          description: Whether this partition is currently syncing data
           default: false
+          x-go-name: IsSyncing
     VirtualNode:
       type: object
       required:
@@ -123,5 +132,86 @@ components:
           example: 12345678
         partitionId:
           type: string
-          description: ID of the partition this virtual node maps to
+          description: ID of the partition this virtual node belongs to
           example: "partition-1"
+    KeyValuePair:
+      type: object
+      required:
+        - key
+        - value
+      properties:
+        key:
+          type: string
+          description: The key for the key-value pair
+          example: "user:123"
+          x-go-name: Key
+        value:
+          type: string
+          description: The value associated with the key
+          example: "John Doe"
+          x-go-name: Value
+    KeyValueResponse:
+      type: object
+      required:
+        - key
+        - value
+        - found
+      properties:
+        key:
+          type: string
+          description: The requested key
+          example: "user:123"
+          x-go-name: Key
+        value:
+          type: string
+          description: The value associated with the key (null if not found)
+          example: "John Doe"
+          nullable: true
+          x-go-name: Value
+        found:
+          type: boolean
+          description: Whether the key was found
+          example: true
+          x-go-name: Found
+    DeleteResponse:
+      type: object
+      required:
+        - key
+        - deleted
+      properties:
+        key:
+          type: string
+          description: The key that was requested for deletion
+          example: "user:123"
+          x-go-name: Key
+        deleted:
+          type: boolean
+          description: Whether the key was successfully deleted
+          example: true
+          x-go-name: Deleted
+    SetValueRequest:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: string
+          description: The value to associate with the key
+          example: "John Doe"
+          x-go-name: Value
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "INVALID_REQUEST"
+          x-go-name: Error
+        message:
+          type: string
+          description: Human-readable error message
+          example: "The request is invalid"
+          x-go-name: Message

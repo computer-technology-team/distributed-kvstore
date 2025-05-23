@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/computer-technology-team/distributed-kvstore/api/controller"
 )
 
@@ -21,8 +20,7 @@ func (s *server) PostNodesRegister(ctx context.Context, request controller.PostN
 	}
 
 	return controller.PostNodesRegister201JSONResponse{
-		Id:     id,
-		Status: common.Unregistered,
+		Id: id,
 	}, nil
 }
 

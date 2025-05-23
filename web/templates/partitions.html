@@ -39,7 +39,8 @@
                     <tr>
                         <th>ID</th>
                         <th>Status</th>
-                        <th>Nodes</th>
+                        <th>Master Node</th>
+                        <th>Node Count</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -47,8 +48,9 @@
                     {{range .Partitions}}
                     <tr>
                         <td>{{.Id}}</td>
-                        <td>-</td>
-                        <td>{{len .Replicas}}</td>
+                        <td><span class="status-{{.Status}}">{{.Status}}</span></td>
+                        <td>{{.MasterNodeId}}</td>
+                        <td>{{len .NodeIds}}</td>
                         <td>
                             <a href="/partitions/{{.Id}}" class="btn-small">View Details</a>
                             <form action="/partitions/remove" method="POST" class="inline-form">

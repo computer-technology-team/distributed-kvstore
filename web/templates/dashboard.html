@@ -24,10 +24,49 @@
             <div class="card">
                 <h3>Partitions</h3>
                 <p>Total: {{ len .Partitions }}</p>
+                <div class="status-summary">
+                    <h4>Status</h4>
+                    <ul>
+                        {{$healthy := 0}}
+                        {{$unhealthy := 0}}
+                        {{$uninitialized := 0}}
+                        {{range .Partitions}}
+                            {{if eq .Status "healthy"}}{{$healthy = add $healthy 1}}{{end}}
+                            {{if eq .Status "unhealthy"}}{{$unhealthy = add $unhealthy 1}}{{end}}
+                            {{if eq .Status "uninitialized"}}{{$uninitialized = add $uninitialized 1}}{{end}}
+                        {{end}}
+                        <li><span class="status-healthy">Healthy:</span> {{$healthy}}</li>
+                        <li><span class="status-unhealthy">Unhealthy:</span> {{$unhealthy}}</li>
+                        <li><span class="status-uninitialized">Uninitialized:</span> {{$uninitialized}}</li>
+                    </ul>
+                </div>
             </div>
             <div class="card">
                 <h3>Virtual Nodes</h3>
                 <p>Total: {{ len .VirtualNodes }}</p>
+                <p>Distribution:</p>
+                <div class="virtual-node-distribution">
+                    {{$partitionCounts := make}}
+                    {{range .VirtualNodes}}
+                        {{$_ := Increment $partitionCounts .PartitionId}}
+                    {{end}}
+                    <ul>
+                    {{range $partitionId, $count := $partitionCounts}}
+                        <li>{{$partitionId}}: {{$count}} virtual nodes</li>
+                    {{end}}
+                    </ul>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Replica Configuration</h3>
+                <form action="/replica-count" method="POST">
+                    <label for="replicaCount">Replica Count:</label>
+                    <input type="number" id="replicaCount" name="replica_count" 
+                           min="0" max="{{ sub (len .Nodes) 1 }}" 
+                           value="{{ .ReplicaCount }}" required>
+                    <p class="help-text">Min: 0, Max: {{ sub (len .Nodes) 1 }}</p>
+                    <button type="submit" class="btn">Update Replica Count</button>
+                </form>
             </div>
         </div>
     </main>

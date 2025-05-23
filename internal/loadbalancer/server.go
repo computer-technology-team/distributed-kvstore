@@ -70,7 +70,7 @@ func balanceReplicaIter(replicaIds []openapi_types.UUID, nodes []common.Node, pa
 			for _, node := range nodes {
 				if node.Id == replicaId && node.Partitions != nil {
 					// Check if this node has the partition and it's healthy
-					if partitionRole, exists := (*node.Partitions)[partitionId]; exists && partitionRole.Status == common.Healthy {
+					if partitionRole, exists := node.Partitions[partitionId]; exists && partitionRole.Status == common.Healthy {
 						if !yield(node) {
 							return
 						}
@@ -106,7 +106,7 @@ func filterHealthyNodes(nodes []common.Node) []common.Node {
 			return false
 		}
 
-		for _, partitionRole := range *node.Partitions {
+		for _, partitionRole := range node.Partitions {
 			if partitionRole.Status == common.Healthy {
 				return true
 			}

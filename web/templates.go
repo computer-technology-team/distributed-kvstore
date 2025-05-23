@@ -4,6 +4,8 @@ import (
 	"embed"
 	"html/template"
 	"net/http"
+
+	"github.com/Masterminds/sprig/v3"
 )
 
 //go:embed templates/*.html
@@ -29,7 +31,7 @@ func (r *defaultTemplateRenderer) Render(w http.ResponseWriter, templateName str
 }
 
 func NewTemplateRenderer() (TemplateRenderer, error) {
-	tmpl, err := template.ParseFS(TemplatesFS, "templates/*.html")
+	tmpl, err := template.New("").Funcs(sprig.FuncMap()).ParseFS(TemplatesFS, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}

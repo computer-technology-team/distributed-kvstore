@@ -9,3 +9,7 @@ generate:
 output: kvstore.gen.go
 output-options:
   nullable-type: true
+  skip-prune: true
+import-mapping:
+  # for a given file/URL that is $ref'd, point `oapi-codegen` to the Go package that this spec is generated into, to perform Go package imports
+  ../common/api.yaml: github.com/computer-technology-team/distributed-kvstore/api/common

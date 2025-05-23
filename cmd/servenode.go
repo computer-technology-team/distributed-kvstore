@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 
 	"github.com/spf13/cobra"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/controller"
-	apiKVStore "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
+	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	"github.com/computer-technology-team/distributed-kvstore/config"
 	"github.com/computer-technology-team/distributed-kvstore/internal/health"
 	"github.com/computer-technology-team/distributed-kvstore/internal/node"
@@ -27,6 +28,11 @@ func NewServeNodeCmd() *cobra.Command {
 			}
 			addr := fmt.Sprintf("%s:%d", cfg.Node.Host, cfg.Node.Port)
 
+			listener, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+
 			client, err := controller.NewClientWithResponses(cfg.Node.ControllerURL)
 			if err != nil {
 				return fmt.Errorf("fail to create controller client: %w", err)
@@ -37,23 +43,21 @@ func NewServeNodeCmd() *cobra.Command {
 				return fmt.Errorf("failed to regsiter node: %w", err)
 			}
 
-			server := node.NewServer(resp.JSON201.Id)
+			id := resp.JSON201.Id
 
-			listener, err := net.Listen("tcp", addr)
-			if err != nil {
-				return err
-			}
+			server := node.NewServer(id)
 
 			// Create a mux to handle both API and health check endpoints
 			mux := http.NewServeMux()
 
-			// Add the API handler
-			mux.Handle("/", apiKVStore.Handler(apiKVStore.NewStrictHandler(server, nil)))
+			// Add the Database API handler
+			mux.Handle("/", database.Handler(database.NewStrictHandler(server, nil)))
 
 			// Add health check endpoint
 			health.AddHealthCheckEndpoint(mux)
 
-			fmt.Printf("Node server started at %s with health check at /health\n", addr)
+			slog.Info("server started", "address", addr,
+				"id", id.String())
 
 			return http.Serve(listener, mux)
 		},

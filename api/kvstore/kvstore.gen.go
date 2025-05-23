@@ -13,45 +13,19 @@ import (
 	"net/url"
 	"strings"
 
+	externalRef0 "github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
-
-// ErrorResponse defines model for ErrorResponse.
-type ErrorResponse struct {
-	// Error Error message
-	Error string `json:"error"`
-}
-
-// KeyResponse defines model for KeyResponse.
-type KeyResponse struct {
-	// Key The key that was operated on
-	Key string `json:"key"`
-}
-
-// KeyValueResponse defines model for KeyValueResponse.
-type KeyValueResponse struct {
-	// Key The key
-	Key string `json:"key"`
-
-	// Value The value associated with the key
-	Value string `json:"value"`
-}
 
 // Pong defines model for Pong.
 type Pong struct {
 	Ping string `json:"ping"`
 }
 
-// SetRequest defines model for SetRequest.
-type SetRequest struct {
-	// Value The value associated with the key
-	Value string `json:"value"`
-}
-
 // SetValueJSONRequestBody defines body for SetValue for application/json ContentType.
-type SetValueJSONRequestBody = SetRequest
+type SetValueJSONRequestBody = externalRef0.SetValueRequest
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -404,9 +378,9 @@ type ClientWithResponsesInterface interface {
 type DeleteKeyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *KeyResponse
-	JSON404      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSON200      *externalRef0.DeleteResponse
+	JSON404      *externalRef0.ErrorResponse
+	JSONDefault  *externalRef0.ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -428,9 +402,9 @@ func (r DeleteKeyResponse) StatusCode() int {
 type GetValueResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *KeyValueResponse
-	JSON404      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSON200      *externalRef0.KeyValueResponse
+	JSON404      *externalRef0.ErrorResponse
+	JSONDefault  *externalRef0.ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -452,9 +426,9 @@ func (r GetValueResponse) StatusCode() int {
 type SetValueResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *KeyValueResponse
-	JSON400      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSON200      *externalRef0.KeyValuePair
+	JSON400      *externalRef0.ErrorResponse
+	JSONDefault  *externalRef0.ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -477,7 +451,7 @@ type PingServerResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *Pong
-	JSONDefault  *ErrorResponse
+	JSONDefault  *externalRef0.ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -555,21 +529,21 @@ func ParseDeleteKeyResponse(rsp *http.Response) (*DeleteKeyResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KeyResponse
+		var dest externalRef0.DeleteResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -595,21 +569,21 @@ func ParseGetValueResponse(rsp *http.Response) (*GetValueResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KeyValueResponse
+		var dest externalRef0.KeyValueResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -635,21 +609,21 @@ func ParseSetValueResponse(rsp *http.Response) (*SetValueResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest KeyValueResponse
+		var dest externalRef0.KeyValuePair
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -682,7 +656,7 @@ func ParsePingServerResponse(rsp *http.Response) (*PingServerResponse, error) {
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest externalRef0.ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -972,7 +946,7 @@ type DeleteKeyResponseObject interface {
 	VisitDeleteKeyResponse(w http.ResponseWriter) error
 }
 
-type DeleteKey200JSONResponse KeyResponse
+type DeleteKey200JSONResponse externalRef0.DeleteResponse
 
 func (response DeleteKey200JSONResponse) VisitDeleteKeyResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -981,7 +955,7 @@ func (response DeleteKey200JSONResponse) VisitDeleteKeyResponse(w http.ResponseW
 	return json.NewEncoder(w).Encode(response)
 }
 
-type DeleteKey404JSONResponse ErrorResponse
+type DeleteKey404JSONResponse externalRef0.ErrorResponse
 
 func (response DeleteKey404JSONResponse) VisitDeleteKeyResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -991,7 +965,7 @@ func (response DeleteKey404JSONResponse) VisitDeleteKeyResponse(w http.ResponseW
 }
 
 type DeleteKeydefaultJSONResponse struct {
-	Body       ErrorResponse
+	Body       externalRef0.ErrorResponse
 	StatusCode int
 }
 
@@ -1010,7 +984,7 @@ type GetValueResponseObject interface {
 	VisitGetValueResponse(w http.ResponseWriter) error
 }
 
-type GetValue200JSONResponse KeyValueResponse
+type GetValue200JSONResponse externalRef0.KeyValueResponse
 
 func (response GetValue200JSONResponse) VisitGetValueResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1019,7 +993,7 @@ func (response GetValue200JSONResponse) VisitGetValueResponse(w http.ResponseWri
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetValue404JSONResponse ErrorResponse
+type GetValue404JSONResponse externalRef0.ErrorResponse
 
 func (response GetValue404JSONResponse) VisitGetValueResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1029,7 +1003,7 @@ func (response GetValue404JSONResponse) VisitGetValueResponse(w http.ResponseWri
 }
 
 type GetValuedefaultJSONResponse struct {
-	Body       ErrorResponse
+	Body       externalRef0.ErrorResponse
 	StatusCode int
 }
 
@@ -1049,7 +1023,7 @@ type SetValueResponseObject interface {
 	VisitSetValueResponse(w http.ResponseWriter) error
 }
 
-type SetValue200JSONResponse KeyValueResponse
+type SetValue200JSONResponse externalRef0.KeyValuePair
 
 func (response SetValue200JSONResponse) VisitSetValueResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1058,7 +1032,7 @@ func (response SetValue200JSONResponse) VisitSetValueResponse(w http.ResponseWri
 	return json.NewEncoder(w).Encode(response)
 }
 
-type SetValue400JSONResponse ErrorResponse
+type SetValue400JSONResponse externalRef0.ErrorResponse
 
 func (response SetValue400JSONResponse) VisitSetValueResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1068,7 +1042,7 @@ func (response SetValue400JSONResponse) VisitSetValueResponse(w http.ResponseWri
 }
 
 type SetValuedefaultJSONResponse struct {
-	Body       ErrorResponse
+	Body       externalRef0.ErrorResponse
 	StatusCode int
 }
 
@@ -1096,7 +1070,7 @@ func (response PingServer200JSONResponse) VisitPingServerResponse(w http.Respons
 }
 
 type PingServerdefaultJSONResponse struct {
-	Body       ErrorResponse
+	Body       externalRef0.ErrorResponse
 	StatusCode int
 }
 

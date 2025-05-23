@@ -158,8 +158,10 @@ func AddFlags(cmd *cobra.Command) {
 			cmd.PersistentFlags().Float64(fc.FlagName, v, fc.Usage)
 		case slog.Level:
 			cmd.PersistentFlags().String(fc.FlagName, v.String(), fc.Usage)
+		case int64:
+			cmd.PersistentFlags().Int64(fc.FlagName, v, fc.Usage)
 		default:
-			slog.Error("invalid value type", "value", v)
+			slog.Warn("invalid value type", "value", v)
 		}
 	}
 }

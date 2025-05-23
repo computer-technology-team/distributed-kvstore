@@ -2,6 +2,7 @@ package health
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 )
 
@@ -19,7 +20,10 @@ func Handler() http.Handler {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(status)
+		err := json.NewEncoder(w).Encode(status)
+		if err != nil {
+			slog.Error("could not json encode respsone status", "error", err)
+		}
 	})
 }
 

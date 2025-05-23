@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/computer-technology-team/distributed-kvstore/web"
 	"github.com/go-chi/chi/v5"
@@ -51,6 +52,8 @@ type AdminServer interface {
 
 	// SystemStats renders system statistics page
 	SystemStats(w http.ResponseWriter, r *http.Request)
+
+	SetReplicaCount(w http.ResponseWriter, r *http.Request)
 }
 
 // NewAdminServer creates a new AdminServer instance
@@ -111,6 +114,8 @@ func (a *adminServer) SetupRoutes() {
 
 		// System statistics
 		r.Get("/stats", a.SystemStats)
+
+		r.Post("/replica-count", a.SetReplicaCount)
 	})
 }
 
@@ -122,6 +127,8 @@ func (a *adminServer) Dashboard(w http.ResponseWriter, r *http.Request) {
 		"Title":        "Admin Dashboard",
 		"Partitions":   state.Partitions,
 		"VirtualNodes": state.VirtualNodes,
+		"Nodes":        state.Nodes,
+		"ReplicaCount": state.ReplicaCount,
 	}
 
 	a.renderTemplate(w, "dashboard.html", data)
@@ -325,6 +332,39 @@ func (a *adminServer) SystemStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.renderTemplate(w, "stats.html", data)
+}
+
+// SetReplicaCount implements AdminServer.
+func (a *adminServer) SetReplicaCount(w http.ResponseWriter, r *http.Request) {
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
+		return
+	}
+
+	replicaCount := r.FormValue("replica_count")
+	if replicaCount == "" {
+		http.Error(w, "Replica Count is required", http.StatusBadRequest)
+		return
+	}
+
+	replicaCountInt, err := strconv.Atoi(replicaCount)
+	if err != nil || replicaCountInt < 0 {
+		http.Error(w, "Invalid Replica Count Number", http.StatusBadRequest)
+	}
+
+	err = a.controller.SetReplicaCount(replicaCountInt)
+	if err != nil {
+		http.Error(w, "could not set replica count", http.StatusBadRequest)
+	}
+
+	http.Redirect(w, r, "/", http.StatusMovedPermanently)
 }
 
 // renderTemplate is a helper function to render templates with error handling

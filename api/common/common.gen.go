@@ -4,17 +4,55 @@
 package common
 
 import (
+	"github.com/oapi-codegen/nullable"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for Status.
 const (
 	Healthy       Status = "healthy"
-	Syncing       Status = "syncing"
 	Unhealthy     Status = "unhealthy"
 	Uninitialized Status = "uninitialized"
-	Unregistered  Status = "unregistered"
 )
+
+// DeleteResponse defines model for DeleteResponse.
+type DeleteResponse struct {
+	// Deleted Whether the key was successfully deleted
+	Deleted bool `json:"deleted"`
+
+	// Key The key that was requested for deletion
+	Key string `json:"key"`
+}
+
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	// Error Error code
+	Error string `json:"error"`
+
+	// Message Human-readable error message
+	Message string `json:"message"`
+}
+
+// KeyValuePair defines model for KeyValuePair.
+type KeyValuePair struct {
+	// Key The key for the key-value pair
+	Key string `json:"key"`
+
+	// Value The value associated with the key
+	Value string `json:"value"`
+}
+
+// KeyValueResponse defines model for KeyValueResponse.
+type KeyValueResponse struct {
+	// Found Whether the key was found
+	Found bool `json:"found"`
+
+	// Key The requested key
+	Key string `json:"key"`
+
+	// Value The value associated with the key (null if not found)
+	Value nullable.Nullable[string] `json:"value"`
+}
 
 // Node defines model for Node.
 type Node struct {
@@ -24,14 +62,8 @@ type Node struct {
 	// Id Unique identifier for the node
 	Id openapi_types.UUID `json:"id"`
 
-	// IsMaster Whether this node is the master for its replica
-	IsMaster *bool `json:"isMaster,omitempty"`
-
-	// PartitionID ID of the partition this node belongs to (if any)
-	PartitionID *string `json:"partitionID,omitempty"`
-
-	// Status Current status of a node or replica
-	Status Status `json:"status"`
+	// Partitions Map of partition IDs to role information for this node
+	Partitions map[string]PartitionRole `json:"partitions"`
 }
 
 // Partition defines model for Partition.
@@ -39,23 +71,32 @@ type Partition struct {
 	// Id Unique identifier for the partition
 	Id string `json:"id"`
 
-	// MasterReplicaId ID of the replica that is currently the master for this partition
-	MasterReplicaId openapi_types.UUID `json:"masterReplicaId"`
+	// MasterNodeId ID of the node that is currently the master for this partition
+	MasterNodeId openapi_types.UUID `json:"masterNodeId"`
 
-	// ReplicaIds List of replica IDs for this partition
-	ReplicaIds []openapi_types.UUID `json:"replicaIds"`
+	// NodeIds List of node IDs that host this partition
+	NodeIds []openapi_types.UUID `json:"nodeIds"`
+
+	// Status Health status of a partition
+	Status Status `json:"status"`
 }
 
-// Replica defines model for Replica.
-type Replica struct {
-	// Address Network address of the replica
-	Address string `json:"address"`
+// PartitionRole defines model for PartitionRole.
+type PartitionRole struct {
+	// IsMaster Whether this node should be the master for this partition
+	IsMaster bool `json:"isMaster"`
 
-	// Id Unique identifier for the node
-	Id openapi_types.UUID `json:"id"`
+	// IsSyncing Whether this partition is currently syncing data
+	IsSyncing bool `json:"isSyncing"`
 
-	// Status Current status of a node or replica
+	// Status Health status of a partition
 	Status Status `json:"status"`
+}
+
+// SetValueRequest defines model for SetValueRequest.
+type SetValueRequest struct {
+	// Value The value to associate with the key
+	Value string `json:"value"`
 }
 
 // State defines model for State.
@@ -66,14 +107,17 @@ type State struct {
 	// Partitions Map of partitions in the distributed key-value store, keyed by partition ID
 	Partitions map[string]Partition `json:"partitions"`
 
+	// ReplicaCount number of replicas each partition should have
+	ReplicaCount int `json:"replicaCount"`
+
 	// UnRegisteredNodes Array of nodes that have not been fully registered
 	UnRegisteredNodes []Node `json:"unRegisteredNodes"`
 
-	// VirtualNodes Array of virtual nodes used for consistent hashing
+	// VirtualNodes Array of virtual nodes used for consistent hashing across all partitions
 	VirtualNodes []VirtualNode `json:"virtualNodes"`
 }
 
-// Status Current status of a node or replica
+// Status Health status of a partition
 type Status string
 
 // VirtualNode defines model for VirtualNode.
@@ -84,6 +128,6 @@ type VirtualNode struct {
 	// Id Unique identifier for the virtual node
 	Id openapi_types.UUID `json:"id"`
 
-	// PartitionId ID of the partition this virtual node maps to
+	// PartitionId ID of the partition this virtual node belongs to
 	PartitionId string `json:"partitionId"`
 }

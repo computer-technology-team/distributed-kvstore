@@ -29,7 +29,7 @@
                     <tr>
                         <th>ID</th>
                         <th>Address</th>
-                        <th>Status</th>
+                        <th>Partitions</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -38,7 +38,21 @@
                     <tr>
                         <td>{{.Id}}</td>
                         <td>{{.Address}}</td>
-                        <td>{{.Status}}</td>
+                        <td>
+                            {{if .Partitions}}
+                                <ul class="partition-list">
+                                {{range $partitionId, $role := .Partitions}}
+                                    <li>
+                                        <a href="/partitions/{{$partitionId}}">{{$partitionId}}</a>
+                                        ({{if $role.IsMaster}}Master{{else}}Replica{{end}}, 
+                                        <span class="status-{{$role.Status}}">{{$role.Status}}</span>)
+                                    </li>
+                                {{end}}
+                                </ul>
+                            {{else}}
+                                <span class="no-partitions">No partitions</span>
+                            {{end}}
+                        </td>
                         <td>
                             <form action="/nodes/remove" method="POST" class="inline-form">
                                 <input type="hidden" name="node_id" value="{{.Id}}">
@@ -58,7 +72,6 @@
                     <tr>
                         <th>ID</th>
                         <th>Address</th>
-                        <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -67,7 +80,6 @@
                     <tr>
                         <td>{{.Id}}</td>
                         <td>{{.Address}}</td>
-                        <td>{{.Status}}</td>
                         <td>
                             <form action="/nodes/add" method="POST" class="inline-form">
                                 <input type="hidden" name="unregistered_node_id" value="{{.Id}}">

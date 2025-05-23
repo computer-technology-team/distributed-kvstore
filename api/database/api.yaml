@@ -1,29 +1,222 @@
 openapi: "3.0.0"
 info:
   version: 1.0.0
-  title: Database API Server
-paths:
-  /state:
-    get:
-      summary: Get the current state of the database node
-      description: Returns the current status and partition ID of the database node
-      responses:
-        "200":
-          description: State information retrieved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NodeState"
+  title: Database API for Distributed Key-Value Store
 components:
   schemas:
     NodeState:
       type: object
       required:
-        - status
+        - nodeId
+        - partitions
       properties:
-        status:
-          $ref: "../common/api.yaml#/components/schemas/Status"
-        partitionId:
+        nodeId:
           type: string
-          description: ID of the partition this node belongs to
+          format: uuid
+          description: Unique identifier for the node
+          example: "123e4567-e89b-12d3-a456-426614174000"
+          x-go-name: NodeID
+        partitions:
+          type: object
+          description: Map of partition IDs to role information for this node
+          additionalProperties:
+            $ref: "../common/api.yaml#/components/schemas/PartitionRole"
+          x-go-name: Partitions
+paths:
+  /cluster/state:
+    get:
+      summary: Get current cluster state
+      description: Retrieves the current state of the entire cluster
+      operationId: getClusterState
+      x-go-name: GetClusterState
+      responses:
+        "200":
+          description: Current cluster state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeState"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+  /nodes/{nodeId}/state:
+    put:
+      summary: Update node state
+      description: Updates the state of a specific node and its partitions
+      operationId: updateNodeState
+      x-go-name: UpdateNodeState
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Unique identifier for the node
+          x-go-name: NodeID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NodeState"
+      responses:
+        "200":
+          description: Node state updated successfully
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        "404":
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+  /partitions/{partitionId}/keys/{key}:
+    get:
+      summary: Get value by key from partition
+      description: Retrieves the value associated with a key from a specific partition
+      operationId: getValueFromPartition
+      x-go-name: GetValueFromPartition
+      parameters:
+        - name: partitionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the partition
           example: "partition-1"
+          x-go-name: PartitionID
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The key to retrieve
+          example: "user:123"
+          x-go-name: Key
+      responses:
+        "200":
+          description: Key found and value returned
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/KeyValueResponse"
+        "404":
+          description: Key not found or partition not found
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+    put:
+      summary: Set key-value pair in partition
+      description: Sets or updates a key-value pair in a specific partition
+      operationId: setValueInPartition
+      x-go-name: SetValueInPartition
+      parameters:
+        - name: partitionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the partition
+          example: "partition-1"
+          x-go-name: PartitionID
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The key to set
+          example: "user:123"
+          x-go-name: Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "../common/api.yaml#/components/schemas/SetValueRequest"
+      responses:
+        "200":
+          description: Key-value pair set successfully
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/KeyValuePair"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        "404":
+          description: Partition not found
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+    delete:
+      summary: Delete key from partition
+      description: Deletes a key-value pair from a specific partition
+      operationId: deleteKeyFromPartition
+      x-go-name: DeleteKeyFromPartition
+      parameters:
+        - name: partitionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the partition
+          example: "partition-1"
+          x-go-name: PartitionID
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The key to delete
+          example: "user:123"
+          x-go-name: Key
+      responses:
+        "200":
+          description: Delete operation completed (key may or may not have existed)
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/DeleteResponse"
+        "404":
+          description: Partition not found
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"

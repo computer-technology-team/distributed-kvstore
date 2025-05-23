@@ -18,7 +18,7 @@ func (s *server) SetValue(ctx context.Context,
 	if err != nil {
 		slog.ErrorContext(ctx, "could not get partition", "method", "set", "error", err)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "could not get partition",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -33,7 +33,7 @@ func (s *server) SetValue(ctx context.Context,
 		slog.ErrorContext(ctx, "master node not found", "method", "set",
 			"partition_id", partition.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "master node not found",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -45,19 +45,19 @@ func (s *server) SetValue(ctx context.Context,
 		slog.ErrorContext(ctx, "master node has no partitions", "method", "set",
 			"partition_id", partition.Id, "node_id", masterReplica.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "master node has no partitions",
 			},
 			StatusCode: http.StatusInternalServerError,
 		}, nil
 	}
 
-	partitionRole, exists := (*masterReplica.Partitions)[partition.Id]
+	partitionRole, exists := masterReplica.Partitions[partition.Id]
 	if !exists || !partitionRole.IsMaster {
 		slog.ErrorContext(ctx, "node is not master for this partition", "method", "set",
 			"partition_id", partition.Id, "node_id", masterReplica.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "node is not master for this partition",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -68,7 +68,7 @@ func (s *server) SetValue(ctx context.Context,
 		slog.ErrorContext(ctx, "master partition not healthy", "method", "set",
 			"partition_id", partition.Id, "node_id", masterReplica.Id)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "master partition not healthy",
 			},
 			StatusCode: http.StatusServiceUnavailable,
@@ -80,7 +80,7 @@ func (s *server) SetValue(ctx context.Context,
 	if err != nil {
 		slog.ErrorContext(ctx, "could not create client", "method", "set", "error", err)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "could not create client",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -88,7 +88,7 @@ func (s *server) SetValue(ctx context.Context,
 	}
 
 	// Create the database request body
-	dbRequestBody := database.SetRequest{
+	dbRequestBody := database.SetValueInPartitionJSONRequestBody{
 		Value: request.Body.Value,
 	}
 
@@ -97,7 +97,7 @@ func (s *server) SetValue(ctx context.Context,
 	if err != nil {
 		slog.ErrorContext(ctx, "error in set value", "method", "set", "error", err)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "could not set value",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -107,9 +107,9 @@ func (s *server) SetValue(ctx context.Context,
 	if resp.JSON200 != nil {
 		return kvstoreAPI.SetValue200JSONResponse(*resp.JSON200), nil
 	} else {
-		slog.ErrorContext(ctx, "unexpected response from server", "method", "set", "error", resp.JSONDefault.Error)
+		slog.ErrorContext(ctx, "unexpected response from server", "method", "set", "error", resp.JSON500.Error)
 		return kvstoreAPI.SetValuedefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "unexpected response from server",
 			},
 			StatusCode: http.StatusInternalServerError,

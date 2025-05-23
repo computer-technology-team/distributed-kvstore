@@ -18,7 +18,7 @@ func (s *server) DeleteKey(ctx context.Context,
 	if err != nil {
 		slog.ErrorContext(ctx, "could not get partition", "method", "delete", "error", err)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "could not get partition",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -28,12 +28,12 @@ func (s *server) DeleteKey(ctx context.Context,
 	masterNode, found := lo.Find(s.statePtr.Load().Nodes, func(node common.Node) bool {
 		return node.Id == partition.MasterNodeId
 	})
-	
+
 	if !found {
 		slog.ErrorContext(ctx, "master node not found", "method", "delete",
 			"partition_id", partition.Id)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "master node not found",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -45,19 +45,19 @@ func (s *server) DeleteKey(ctx context.Context,
 		slog.ErrorContext(ctx, "master node has no partitions", "method", "delete",
 			"partition_id", partition.Id, "node_id", masterNode.Id)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "master node has no partitions",
 			},
 			StatusCode: http.StatusInternalServerError,
 		}, nil
 	}
 
-	partitionRole, exists := (*masterNode.Partitions)[partition.Id]
+	partitionRole, exists := masterNode.Partitions[partition.Id]
 	if !exists || !partitionRole.IsMaster {
 		slog.ErrorContext(ctx, "node is not master for this partition", "method", "delete",
 			"partition_id", partition.Id, "node_id", masterNode.Id)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "node is not master for this partition",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -68,7 +68,7 @@ func (s *server) DeleteKey(ctx context.Context,
 		slog.ErrorContext(ctx, "master partition not healthy", "method", "delete",
 			"partition_id", partition.Id, "node_id", masterNode.Id)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "master partition not healthy",
 			},
 			StatusCode: http.StatusServiceUnavailable,
@@ -80,7 +80,7 @@ func (s *server) DeleteKey(ctx context.Context,
 	if err != nil {
 		slog.ErrorContext(ctx, "could not create client", "method", "delete", "error", err)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "could not create client",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -92,7 +92,7 @@ func (s *server) DeleteKey(ctx context.Context,
 	if err != nil {
 		slog.ErrorContext(ctx, "error in delete key", "method", "delete", "error", err)
 		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
+			Body: common.ErrorResponse{
 				Error: "could not delete key",
 			},
 			StatusCode: http.StatusInternalServerError,
@@ -103,13 +103,16 @@ func (s *server) DeleteKey(ctx context.Context,
 		return kvstoreAPI.DeleteKey200JSONResponse(*resp.JSON200), nil
 	} else if resp.JSON404 != nil {
 		return kvstoreAPI.DeleteKey404JSONResponse(*resp.JSON404), nil
+	} else if resp.JSON500 != nil {
+		slog.ErrorContext(ctx, "unexpected response from server", "method", "delete", "error", resp.JSON500.Error)
 	} else {
-		slog.ErrorContext(ctx, "unexpected response from server", "method", "delete", "error", resp.JSONDefault.Error)
-		return kvstoreAPI.DeleteKeydefaultJSONResponse{
-			Body: kvstoreAPI.ErrorResponse{
-				Error: "unexpected response from server",
-			},
-			StatusCode: http.StatusInternalServerError,
-		}, nil
+		slog.ErrorContext(ctx, "unexpected response from server", "method", "delete")
 	}
+
+	return kvstoreAPI.DeleteKeydefaultJSONResponse{
+		Body: common.ErrorResponse{
+			Error: "unexpected response from server",
+		},
+		StatusCode: http.StatusInternalServerError,
+	}, nil
 }

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"log/slog"
 	"slices"
@@ -28,6 +29,7 @@ type Controller struct {
 	healthCheckTimeout  time.Duration
 	ticker              *time.Ticker
 	stopWorker          chan int
+	nodeClients         map[uuid.UUID]database.ClientWithResponsesInterface
 }
 
 func (c *Controller) AddPartition(partitionID string) error {
@@ -46,27 +48,50 @@ func (c *Controller) AddPartition(partitionID string) error {
 	}
 
 	if len(c.state.Partitions) == 0 {
-		// Update nodes with partition information
+		// Initialize partitions map for each node
 		for i := range c.state.Nodes {
-			c.state.Nodes[i].PartitionID = &partitionID
-			c.state.Nodes[i].IsMaster = lo.ToPtr(false)
+			if c.state.Nodes[i].Partitions == nil {
+				c.state.Nodes[i].Partitions = map[string]common.PartitionRole{}
+			}
+			role := common.PartitionRole{
+				IsMaster: i == 0,
+				Status:   common.Healthy,
+			}
+
+			c.state.Nodes[i].Partitions[partitionID] = role
 		}
 
-		// Set the first node as master
-		c.state.Nodes[0].IsMaster = lo.ToPtr(true)
-
-		// Extract replica IDs from nodes
-		replicaIds := make([]openapi_types.UUID, len(c.state.Nodes))
+		updatedNodeIds := make([]openapi_types.UUID, len(c.state.Nodes))
 		for i, node := range c.state.Nodes {
-			replicaIds[i] = node.Id
+			updatedNodeIds[i] = node.Id
 		}
 
 		c.state.Partitions[partitionID] = common.Partition{
-			Id:              partitionID,
-			MasterReplicaId: c.state.Nodes[0].Id,
+			Id:           partitionID,
+			MasterNodeId: c.state.Nodes[0].Id,
+			NodeIds:      updatedNodeIds,
+			Status:       common.Healthy,
 		}
-		go c.dispatchState()
-		return c.generateVirtualNodesForPartition(partitionID, 3*len(c.state.Nodes))
+
+		err := c.generateVirtualNodesForPartition(partitionID, 3*len(c.state.Nodes))
+		if err != nil {
+			slog.Error("failed to generate virtual nodes for partition", "error", err)
+			return err
+		}
+
+		nodeStateUpdates := lo.Map(updatedNodeIds, func(nodeID openapi_types.UUID, _ int) database.NodeState {
+			node, _ := lo.Find(c.state.Nodes, func(n common.Node) bool { return n.Id == nodeID })
+			return database.NodeState{
+				NodeID:     nodeID,
+				Partitions: node.Partitions,
+			}
+		})
+
+		go func() {
+			c.dispatchNodeState(nodeStateUpdates)
+			c.dispatchState()
+		}()
+		return nil
 	}
 
 	return errors.New("unimplemented")
@@ -81,11 +106,15 @@ func (c *Controller) AddNode(nodeID uuid.UUID, nodeAddress string) error {
 	defer c.lock.Unlock()
 
 	if len(c.state.Partitions) == 0 {
+		// Initialize empty partitions map
+		partitions := make(map[string]common.PartitionRole)
+
 		c.state.Nodes = append(c.state.Nodes, common.Node{
-			Address: nodeAddress,
-			Id:      nodeID,
-			Status:  common.Uninitialized,
+			Address:    nodeAddress,
+			Id:         nodeID,
+			Partitions: partitions,
 		})
+
 		return nil
 	}
 
@@ -126,11 +155,13 @@ func (c *Controller) RegisterNode(nodeID string) (uuid.UUID, error) {
 		return uuid.Max, errors.New("registered node with this address already exists")
 	}
 
+	// Initialize empty partitions map
+	partitions := make(map[string]common.PartitionRole)
+
 	registeredNode := common.Node{
-		Address:     unregisteredNode.Address,
-		Id:          unregisteredNode.Id,
-		PartitionID: nil,
-		Status:      common.Healthy,
+		Address:    unregisteredNode.Address,
+		Id:         unregisteredNode.Id,
+		Partitions: partitions,
 	}
 
 	c.state.Nodes = append(c.state.Nodes, registeredNode)
@@ -156,15 +187,33 @@ func (c *Controller) startWorker() {
 }
 
 func (c *Controller) checkNodes() {
-	for _, node := range c.state.Nodes {
-		c.checkNode(&node)
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	for i := range c.state.Nodes {
+		c.checkNode(&c.state.Nodes[i])
+	}
+}
+
+// updateNodePartitionsStatus updates the status of all partitions for a node
+func (c *Controller) updateNodePartitionsStatus(node *common.Node, status common.Status) {
+	if node.Partitions == nil {
+		return
+	}
+
+	for partitionID := range node.Partitions {
+		node.Partitions[partitionID] = common.PartitionRole{
+			IsMaster: node.Partitions[partitionID].IsMaster,
+			Status:   status,
+		}
 	}
 }
 
 func (c *Controller) checkNode(node *common.Node) {
 	client, err := database.NewClientWithResponses("http://" + node.Address)
 	if err != nil {
-		node.Status = common.Unhealthy
+		// Update status for all partitions this node is responsible for
+		c.updateNodePartitionsStatus(node, common.Unhealthy)
 		slog.Error("could not initalize database client", "error", err,
 			"node_address", node.Address)
 		return
@@ -173,21 +222,24 @@ func (c *Controller) checkNode(node *common.Node) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.healthCheckTimeout)
 	defer cancel()
 
-	resp, err := client.GetStateWithResponse(ctx)
+	resp, err := client.GetClusterStateWithResponse(ctx)
 	if err != nil {
-		node.Status = common.Unhealthy
+		// Update status for all partitions this node is responsible for
+		c.updateNodePartitionsStatus(node, common.Unhealthy)
 		slog.Error("could not get state", "node_address", node.Address, "error", err)
 		return
 	}
 
 	if resp.StatusCode() != 200 {
-		node.Status = common.Unhealthy
+		// Update status for all partitions this node is responsible for
+		c.updateNodePartitionsStatus(node, common.Unhealthy)
 		slog.Error("state response non 200",
 			"node_address", node.Address, "status_code", resp.StatusCode())
 		return
 	}
 
-	node.Status = common.Healthy
+	// Update status for all partitions this node is responsible for
+	c.updateNodePartitionsStatus(node, common.Healthy)
 }
 
 func (c *Controller) StopWatcher() {
@@ -208,13 +260,19 @@ func (c *Controller) RegisterNodeByAddress(address string) (uuid.UUID, error) {
 	}
 
 	id := uuid.New()
+	client, err := database.NewClientWithResponses("http://" + address)
+	if err != nil {
+		slog.Error("could not create database client", "node_address", address)
+		return uuid.Max, fmt.Errorf("could not create database client: %w", err)
+	}
 
+	c.nodeClients[id] = client
+
+	// Create an empty partitions map for the unregistered node
 	c.state.UnRegisteredNodes = append(c.state.UnRegisteredNodes,
 		common.Node{
-			Address:     address,
-			Id:          openapi_types.UUID(id),
-			PartitionID: nil,
-			Status:      common.Unregistered,
+			Address: address,
+			Id:      id,
 		})
 
 	return id, nil
@@ -247,6 +305,18 @@ func (c *Controller) generateVirtualNodesForPartition(partitionId string, count 
 	return nil
 }
 
+func (c *Controller) dispatchNodeState(nodeStateUpdates []database.NodeState) {
+	for _, node := range nodeStateUpdates {
+		dbClient := c.nodeClients[node.NodeID]
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		resp, err := dbClient.UpdateNodeStateWithResponse(ctx, node.NodeID, database.UpdateNodeStateJSONRequestBody(node))
+		if err != nil || resp.StatusCode() != 200 {
+			slog.Error("could not update node status", "node_id", node.NodeID, "response_status_code", resp.StatusCode())
+		}
+	}
+}
+
 func (c *Controller) dispatchState() {
 	ctx := context.Background()
 	_, err := c.balancerClient.SetStateWithResponse(ctx, loadbalancer.SetStateJSONRequestBody(c.state))
@@ -256,6 +326,19 @@ func (c *Controller) dispatchState() {
 	}
 }
 
+// SetReplicaNumber sets the replica number with proper locking
+func (c *Controller) SetReplicaCount(replicaNum int) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	if replicaNum >= len(c.state.Nodes) {
+		return errors.New("replica count can not be equal or more than node count")
+
+	}
+
+	c.state.ReplicaCount = replicaNum
+	return nil
+}
+
 func NewController(healthCheckInterval time.Duration, healthCheckTimeout time.Duration, balancerClient loadbalancer.ClientWithResponsesInterface) *Controller {
 	return &Controller{
 		balancerClient:      balancerClient,
@@ -263,5 +346,6 @@ func NewController(healthCheckInterval time.Duration, healthCheckTimeout time.Du
 		healthCheckInterval: healthCheckInterval,
 		healthCheckTimeout:  healthCheckTimeout,
 		stopWorker:          make(chan int),
+		nodeClients:         make(map[uuid.UUID]database.ClientWithResponsesInterface),
 	}
 }

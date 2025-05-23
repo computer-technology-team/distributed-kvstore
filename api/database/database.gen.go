@@ -4,6 +4,7 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,17 +15,25 @@ import (
 
 	externalRef0 "github.com/computer-technology-team/distributed-kvstore/api/common"
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // NodeState defines model for NodeState.
 type NodeState struct {
-	// PartitionId ID of the partition this node belongs to
-	PartitionId *string `json:"partitionId,omitempty"`
+	// NodeID Unique identifier for the node
+	NodeID openapi_types.UUID `json:"nodeId"`
 
-	// Status Current status of a node or replica
-	Status externalRef0.Status `json:"status"`
+	// Partitions Map of partition IDs to role information for this node
+	Partitions map[string]externalRef0.PartitionRole `json:"partitions"`
 }
+
+// UpdateNodeStateJSONRequestBody defines body for UpdateNodeState for application/json ContentType.
+type UpdateNodeStateJSONRequestBody = NodeState
+
+// SetValueInPartitionJSONRequestBody defines body for SetValueInPartition for application/json ContentType.
+type SetValueInPartitionJSONRequestBody = externalRef0.SetValueRequest
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -99,12 +108,28 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// GetState request
-	GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetClusterState request
+	GetClusterState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateNodeStateWithBody request with any body
+	UpdateNodeStateWithBody(ctx context.Context, nodeID openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateNodeState(ctx context.Context, nodeID openapi_types.UUID, body UpdateNodeStateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteKeyFromPartition request
+	DeleteKeyFromPartition(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetValueFromPartition request
+	GetValueFromPartition(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SetValueInPartitionWithBody request with any body
+	SetValueInPartitionWithBody(ctx context.Context, partitionID string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SetValueInPartition(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
-func (c *Client) GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetStateRequest(c.Server)
+func (c *Client) GetClusterState(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetClusterStateRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +140,80 @@ func (c *Client) GetState(ctx context.Context, reqEditors ...RequestEditorFn) (*
 	return c.Client.Do(req)
 }
 
-// NewGetStateRequest generates requests for GetState
-func NewGetStateRequest(server string) (*http.Request, error) {
+func (c *Client) UpdateNodeStateWithBody(ctx context.Context, nodeID openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNodeStateRequestWithBody(c.Server, nodeID, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNodeState(ctx context.Context, nodeID openapi_types.UUID, body UpdateNodeStateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNodeStateRequest(c.Server, nodeID, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteKeyFromPartition(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteKeyFromPartitionRequest(c.Server, partitionID, key)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetValueFromPartition(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetValueFromPartitionRequest(c.Server, partitionID, key)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SetValueInPartitionWithBody(ctx context.Context, partitionID string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetValueInPartitionRequestWithBody(c.Server, partitionID, key, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SetValueInPartition(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSetValueInPartitionRequest(c.Server, partitionID, key, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewGetClusterStateRequest generates requests for GetClusterState
+func NewGetClusterStateRequest(server string) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -124,7 +221,7 @@ func NewGetStateRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/state")
+	operationPath := fmt.Sprintf("/cluster/state")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -138,6 +235,189 @@ func NewGetStateRequest(server string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewUpdateNodeStateRequest calls the generic UpdateNodeState builder with application/json body
+func NewUpdateNodeStateRequest(server string, nodeID openapi_types.UUID, body UpdateNodeStateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateNodeStateRequestWithBody(server, nodeID, "application/json", bodyReader)
+}
+
+// NewUpdateNodeStateRequestWithBody generates requests for UpdateNodeState with any type of body
+func NewUpdateNodeStateRequestWithBody(server string, nodeID openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "nodeId", runtime.ParamLocationPath, nodeID)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/nodes/%s/state", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteKeyFromPartitionRequest generates requests for DeleteKeyFromPartition
+func NewDeleteKeyFromPartitionRequest(server string, partitionID string, key string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "partitionId", runtime.ParamLocationPath, partitionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "key", runtime.ParamLocationPath, key)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/partitions/%s/keys/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetValueFromPartitionRequest generates requests for GetValueFromPartition
+func NewGetValueFromPartitionRequest(server string, partitionID string, key string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "partitionId", runtime.ParamLocationPath, partitionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "key", runtime.ParamLocationPath, key)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/partitions/%s/keys/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewSetValueInPartitionRequest calls the generic SetValueInPartition builder with application/json body
+func NewSetValueInPartitionRequest(server string, partitionID string, key string, body SetValueInPartitionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSetValueInPartitionRequestWithBody(server, partitionID, key, "application/json", bodyReader)
+}
+
+// NewSetValueInPartitionRequestWithBody generates requests for SetValueInPartition with any type of body
+func NewSetValueInPartitionRequestWithBody(server string, partitionID string, key string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "partitionId", runtime.ParamLocationPath, partitionID)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "key", runtime.ParamLocationPath, key)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/partitions/%s/keys/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -185,18 +465,35 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// GetStateWithResponse request
-	GetStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStateResponse, error)
+	// GetClusterStateWithResponse request
+	GetClusterStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClusterStateResponse, error)
+
+	// UpdateNodeStateWithBodyWithResponse request with any body
+	UpdateNodeStateWithBodyWithResponse(ctx context.Context, nodeID openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNodeStateResponse, error)
+
+	UpdateNodeStateWithResponse(ctx context.Context, nodeID openapi_types.UUID, body UpdateNodeStateJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNodeStateResponse, error)
+
+	// DeleteKeyFromPartitionWithResponse request
+	DeleteKeyFromPartitionWithResponse(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*DeleteKeyFromPartitionResponse, error)
+
+	// GetValueFromPartitionWithResponse request
+	GetValueFromPartitionWithResponse(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*GetValueFromPartitionResponse, error)
+
+	// SetValueInPartitionWithBodyWithResponse request with any body
+	SetValueInPartitionWithBodyWithResponse(ctx context.Context, partitionID string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetValueInPartitionResponse, error)
+
+	SetValueInPartitionWithResponse(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*SetValueInPartitionResponse, error)
 }
 
-type GetStateResponse struct {
+type GetClusterStateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *NodeState
+	JSON500      *externalRef0.ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
-func (r GetStateResponse) Status() string {
+func (r GetClusterStateResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -204,31 +501,180 @@ func (r GetStateResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetStateResponse) StatusCode() int {
+func (r GetClusterStateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
 	return 0
 }
 
-// GetStateWithResponse request returning *GetStateResponse
-func (c *ClientWithResponses) GetStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStateResponse, error) {
-	rsp, err := c.GetState(ctx, reqEditors...)
+type UpdateNodeStateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *externalRef0.ErrorResponse
+	JSON404      *externalRef0.ErrorResponse
+	JSON500      *externalRef0.ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateNodeStateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateNodeStateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteKeyFromPartitionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *externalRef0.DeleteResponse
+	JSON404      *externalRef0.ErrorResponse
+	JSON500      *externalRef0.ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteKeyFromPartitionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteKeyFromPartitionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetValueFromPartitionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *externalRef0.KeyValueResponse
+	JSON404      *externalRef0.ErrorResponse
+	JSON500      *externalRef0.ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetValueFromPartitionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetValueFromPartitionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SetValueInPartitionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *externalRef0.KeyValuePair
+	JSON400      *externalRef0.ErrorResponse
+	JSON404      *externalRef0.ErrorResponse
+	JSON500      *externalRef0.ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SetValueInPartitionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SetValueInPartitionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// GetClusterStateWithResponse request returning *GetClusterStateResponse
+func (c *ClientWithResponses) GetClusterStateWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClusterStateResponse, error) {
+	rsp, err := c.GetClusterState(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetStateResponse(rsp)
+	return ParseGetClusterStateResponse(rsp)
 }
 
-// ParseGetStateResponse parses an HTTP response from a GetStateWithResponse call
-func ParseGetStateResponse(rsp *http.Response) (*GetStateResponse, error) {
+// UpdateNodeStateWithBodyWithResponse request with arbitrary body returning *UpdateNodeStateResponse
+func (c *ClientWithResponses) UpdateNodeStateWithBodyWithResponse(ctx context.Context, nodeID openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNodeStateResponse, error) {
+	rsp, err := c.UpdateNodeStateWithBody(ctx, nodeID, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNodeStateResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateNodeStateWithResponse(ctx context.Context, nodeID openapi_types.UUID, body UpdateNodeStateJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNodeStateResponse, error) {
+	rsp, err := c.UpdateNodeState(ctx, nodeID, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNodeStateResponse(rsp)
+}
+
+// DeleteKeyFromPartitionWithResponse request returning *DeleteKeyFromPartitionResponse
+func (c *ClientWithResponses) DeleteKeyFromPartitionWithResponse(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*DeleteKeyFromPartitionResponse, error) {
+	rsp, err := c.DeleteKeyFromPartition(ctx, partitionID, key, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteKeyFromPartitionResponse(rsp)
+}
+
+// GetValueFromPartitionWithResponse request returning *GetValueFromPartitionResponse
+func (c *ClientWithResponses) GetValueFromPartitionWithResponse(ctx context.Context, partitionID string, key string, reqEditors ...RequestEditorFn) (*GetValueFromPartitionResponse, error) {
+	rsp, err := c.GetValueFromPartition(ctx, partitionID, key, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetValueFromPartitionResponse(rsp)
+}
+
+// SetValueInPartitionWithBodyWithResponse request with arbitrary body returning *SetValueInPartitionResponse
+func (c *ClientWithResponses) SetValueInPartitionWithBodyWithResponse(ctx context.Context, partitionID string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SetValueInPartitionResponse, error) {
+	rsp, err := c.SetValueInPartitionWithBody(ctx, partitionID, key, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetValueInPartitionResponse(rsp)
+}
+
+func (c *ClientWithResponses) SetValueInPartitionWithResponse(ctx context.Context, partitionID string, key string, body SetValueInPartitionJSONRequestBody, reqEditors ...RequestEditorFn) (*SetValueInPartitionResponse, error) {
+	rsp, err := c.SetValueInPartition(ctx, partitionID, key, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSetValueInPartitionResponse(rsp)
+}
+
+// ParseGetClusterStateResponse parses an HTTP response from a GetClusterStateWithResponse call
+func ParseGetClusterStateResponse(rsp *http.Response) (*GetClusterStateResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetStateResponse{
+	response := &GetClusterStateResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
@@ -241,6 +687,180 @@ func ParseGetStateResponse(rsp *http.Response) (*GetStateResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateNodeStateResponse parses an HTTP response from a UpdateNodeStateWithResponse call
+func ParseUpdateNodeStateResponse(rsp *http.Response) (*UpdateNodeStateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateNodeStateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteKeyFromPartitionResponse parses an HTTP response from a DeleteKeyFromPartitionWithResponse call
+func ParseDeleteKeyFromPartitionResponse(rsp *http.Response) (*DeleteKeyFromPartitionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteKeyFromPartitionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest externalRef0.DeleteResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetValueFromPartitionResponse parses an HTTP response from a GetValueFromPartitionWithResponse call
+func ParseGetValueFromPartitionResponse(rsp *http.Response) (*GetValueFromPartitionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetValueFromPartitionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest externalRef0.KeyValueResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSetValueInPartitionResponse parses an HTTP response from a SetValueInPartitionWithResponse call
+func ParseSetValueInPartitionResponse(rsp *http.Response) (*SetValueInPartitionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SetValueInPartitionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest externalRef0.KeyValuePair
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest externalRef0.ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
 	}
 
 	return response, nil
@@ -248,18 +868,54 @@ func ParseGetStateResponse(rsp *http.Response) (*GetStateResponse, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Get the current state of the database node
-	// (GET /state)
-	GetState(w http.ResponseWriter, r *http.Request)
+	// Get current cluster state
+	// (GET /cluster/state)
+	GetClusterState(w http.ResponseWriter, r *http.Request)
+	// Update node state
+	// (PUT /nodes/{nodeId}/state)
+	UpdateNodeState(w http.ResponseWriter, r *http.Request, nodeID openapi_types.UUID)
+	// Delete key from partition
+	// (DELETE /partitions/{partitionId}/keys/{key})
+	DeleteKeyFromPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string)
+	// Get value by key from partition
+	// (GET /partitions/{partitionId}/keys/{key})
+	GetValueFromPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string)
+	// Set key-value pair in partition
+	// (PUT /partitions/{partitionId}/keys/{key})
+	SetValueInPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
 
-// Get the current state of the database node
-// (GET /state)
-func (_ Unimplemented) GetState(w http.ResponseWriter, r *http.Request) {
+// Get current cluster state
+// (GET /cluster/state)
+func (_ Unimplemented) GetClusterState(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Update node state
+// (PUT /nodes/{nodeId}/state)
+func (_ Unimplemented) UpdateNodeState(w http.ResponseWriter, r *http.Request, nodeID openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Delete key from partition
+// (DELETE /partitions/{partitionId}/keys/{key})
+func (_ Unimplemented) DeleteKeyFromPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get value by key from partition
+// (GET /partitions/{partitionId}/keys/{key})
+func (_ Unimplemented) GetValueFromPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Set key-value pair in partition
+// (PUT /partitions/{partitionId}/keys/{key})
+func (_ Unimplemented) SetValueInPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -272,11 +928,138 @@ type ServerInterfaceWrapper struct {
 
 type MiddlewareFunc func(http.Handler) http.Handler
 
-// GetState operation middleware
-func (siw *ServerInterfaceWrapper) GetState(w http.ResponseWriter, r *http.Request) {
+// GetClusterState operation middleware
+func (siw *ServerInterfaceWrapper) GetClusterState(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetState(w, r)
+		siw.Handler.GetClusterState(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNodeState operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNodeState(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "nodeId" -------------
+	var nodeID openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "nodeId", chi.URLParam(r, "nodeId"), &nodeID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nodeId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNodeState(w, r, nodeID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteKeyFromPartition operation middleware
+func (siw *ServerInterfaceWrapper) DeleteKeyFromPartition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "partitionId" -------------
+	var partitionID string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "partitionId", chi.URLParam(r, "partitionId"), &partitionID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "partitionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteKeyFromPartition(w, r, partitionID, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetValueFromPartition operation middleware
+func (siw *ServerInterfaceWrapper) GetValueFromPartition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "partitionId" -------------
+	var partitionID string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "partitionId", chi.URLParam(r, "partitionId"), &partitionID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "partitionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetValueFromPartition(w, r, partitionID, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetValueInPartition operation middleware
+func (siw *ServerInterfaceWrapper) SetValueInPartition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "partitionId" -------------
+	var partitionID string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "partitionId", chi.URLParam(r, "partitionId"), &partitionID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "partitionId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "key" -------------
+	var key string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", chi.URLParam(r, "key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetValueInPartition(w, r, partitionID, key)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -400,33 +1183,228 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/state", wrapper.GetState)
+		r.Get(options.BaseURL+"/cluster/state", wrapper.GetClusterState)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/nodes/{nodeId}/state", wrapper.UpdateNodeState)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/partitions/{partitionId}/keys/{key}", wrapper.DeleteKeyFromPartition)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/partitions/{partitionId}/keys/{key}", wrapper.GetValueFromPartition)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/partitions/{partitionId}/keys/{key}", wrapper.SetValueInPartition)
 	})
 
 	return r
 }
 
-type GetStateRequestObject struct {
+type GetClusterStateRequestObject struct {
 }
 
-type GetStateResponseObject interface {
-	VisitGetStateResponse(w http.ResponseWriter) error
+type GetClusterStateResponseObject interface {
+	VisitGetClusterStateResponse(w http.ResponseWriter) error
 }
 
-type GetState200JSONResponse NodeState
+type GetClusterState200JSONResponse NodeState
 
-func (response GetState200JSONResponse) VisitGetStateResponse(w http.ResponseWriter) error {
+func (response GetClusterState200JSONResponse) VisitGetClusterStateResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetClusterState500JSONResponse externalRef0.ErrorResponse
+
+func (response GetClusterState500JSONResponse) VisitGetClusterStateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNodeStateRequestObject struct {
+	NodeID openapi_types.UUID `json:"nodeId"`
+	Body   *UpdateNodeStateJSONRequestBody
+}
+
+type UpdateNodeStateResponseObject interface {
+	VisitUpdateNodeStateResponse(w http.ResponseWriter) error
+}
+
+type UpdateNodeState200Response struct {
+}
+
+func (response UpdateNodeState200Response) VisitUpdateNodeStateResponse(w http.ResponseWriter) error {
+	w.WriteHeader(200)
+	return nil
+}
+
+type UpdateNodeState400JSONResponse externalRef0.ErrorResponse
+
+func (response UpdateNodeState400JSONResponse) VisitUpdateNodeStateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNodeState404JSONResponse externalRef0.ErrorResponse
+
+func (response UpdateNodeState404JSONResponse) VisitUpdateNodeStateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNodeState500JSONResponse externalRef0.ErrorResponse
+
+func (response UpdateNodeState500JSONResponse) VisitUpdateNodeStateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteKeyFromPartitionRequestObject struct {
+	PartitionID string `json:"partitionId"`
+	Key         string `json:"key"`
+}
+
+type DeleteKeyFromPartitionResponseObject interface {
+	VisitDeleteKeyFromPartitionResponse(w http.ResponseWriter) error
+}
+
+type DeleteKeyFromPartition200JSONResponse externalRef0.DeleteResponse
+
+func (response DeleteKeyFromPartition200JSONResponse) VisitDeleteKeyFromPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteKeyFromPartition404JSONResponse externalRef0.ErrorResponse
+
+func (response DeleteKeyFromPartition404JSONResponse) VisitDeleteKeyFromPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteKeyFromPartition500JSONResponse externalRef0.ErrorResponse
+
+func (response DeleteKeyFromPartition500JSONResponse) VisitDeleteKeyFromPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetValueFromPartitionRequestObject struct {
+	PartitionID string `json:"partitionId"`
+	Key         string `json:"key"`
+}
+
+type GetValueFromPartitionResponseObject interface {
+	VisitGetValueFromPartitionResponse(w http.ResponseWriter) error
+}
+
+type GetValueFromPartition200JSONResponse externalRef0.KeyValueResponse
+
+func (response GetValueFromPartition200JSONResponse) VisitGetValueFromPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetValueFromPartition404JSONResponse externalRef0.ErrorResponse
+
+func (response GetValueFromPartition404JSONResponse) VisitGetValueFromPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetValueFromPartition500JSONResponse externalRef0.ErrorResponse
+
+func (response GetValueFromPartition500JSONResponse) VisitGetValueFromPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetValueInPartitionRequestObject struct {
+	PartitionID string `json:"partitionId"`
+	Key         string `json:"key"`
+	Body        *SetValueInPartitionJSONRequestBody
+}
+
+type SetValueInPartitionResponseObject interface {
+	VisitSetValueInPartitionResponse(w http.ResponseWriter) error
+}
+
+type SetValueInPartition200JSONResponse externalRef0.KeyValuePair
+
+func (response SetValueInPartition200JSONResponse) VisitSetValueInPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetValueInPartition400JSONResponse externalRef0.ErrorResponse
+
+func (response SetValueInPartition400JSONResponse) VisitSetValueInPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetValueInPartition404JSONResponse externalRef0.ErrorResponse
+
+func (response SetValueInPartition404JSONResponse) VisitSetValueInPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SetValueInPartition500JSONResponse externalRef0.ErrorResponse
+
+func (response SetValueInPartition500JSONResponse) VisitSetValueInPartitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(500)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
-	// Get the current state of the database node
-	// (GET /state)
-	GetState(ctx context.Context, request GetStateRequestObject) (GetStateResponseObject, error)
+	// Get current cluster state
+	// (GET /cluster/state)
+	GetClusterState(ctx context.Context, request GetClusterStateRequestObject) (GetClusterStateResponseObject, error)
+	// Update node state
+	// (PUT /nodes/{nodeId}/state)
+	UpdateNodeState(ctx context.Context, request UpdateNodeStateRequestObject) (UpdateNodeStateResponseObject, error)
+	// Delete key from partition
+	// (DELETE /partitions/{partitionId}/keys/{key})
+	DeleteKeyFromPartition(ctx context.Context, request DeleteKeyFromPartitionRequestObject) (DeleteKeyFromPartitionResponseObject, error)
+	// Get value by key from partition
+	// (GET /partitions/{partitionId}/keys/{key})
+	GetValueFromPartition(ctx context.Context, request GetValueFromPartitionRequestObject) (GetValueFromPartitionResponseObject, error)
+	// Set key-value pair in partition
+	// (PUT /partitions/{partitionId}/keys/{key})
+	SetValueInPartition(ctx context.Context, request SetValueInPartitionRequestObject) (SetValueInPartitionResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -458,23 +1436,144 @@ type strictHandler struct {
 	options     StrictHTTPServerOptions
 }
 
-// GetState operation middleware
-func (sh *strictHandler) GetState(w http.ResponseWriter, r *http.Request) {
-	var request GetStateRequestObject
+// GetClusterState operation middleware
+func (sh *strictHandler) GetClusterState(w http.ResponseWriter, r *http.Request) {
+	var request GetClusterStateRequestObject
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetState(ctx, request.(GetStateRequestObject))
+		return sh.ssi.GetClusterState(ctx, request.(GetClusterStateRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetState")
+		handler = middleware(handler, "GetClusterState")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetStateResponseObject); ok {
-		if err := validResponse.VisitGetStateResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetClusterStateResponseObject); ok {
+		if err := validResponse.VisitGetClusterStateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNodeState operation middleware
+func (sh *strictHandler) UpdateNodeState(w http.ResponseWriter, r *http.Request, nodeID openapi_types.UUID) {
+	var request UpdateNodeStateRequestObject
+
+	request.NodeID = nodeID
+
+	var body UpdateNodeStateJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNodeState(ctx, request.(UpdateNodeStateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNodeState")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNodeStateResponseObject); ok {
+		if err := validResponse.VisitUpdateNodeStateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteKeyFromPartition operation middleware
+func (sh *strictHandler) DeleteKeyFromPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
+	var request DeleteKeyFromPartitionRequestObject
+
+	request.PartitionID = partitionID
+	request.Key = key
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteKeyFromPartition(ctx, request.(DeleteKeyFromPartitionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteKeyFromPartition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteKeyFromPartitionResponseObject); ok {
+		if err := validResponse.VisitDeleteKeyFromPartitionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetValueFromPartition operation middleware
+func (sh *strictHandler) GetValueFromPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
+	var request GetValueFromPartitionRequestObject
+
+	request.PartitionID = partitionID
+	request.Key = key
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetValueFromPartition(ctx, request.(GetValueFromPartitionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetValueFromPartition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetValueFromPartitionResponseObject); ok {
+		if err := validResponse.VisitGetValueFromPartitionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetValueInPartition operation middleware
+func (sh *strictHandler) SetValueInPartition(w http.ResponseWriter, r *http.Request, partitionID string, key string) {
+	var request SetValueInPartitionRequestObject
+
+	request.PartitionID = partitionID
+	request.Key = key
+
+	var body SetValueInPartitionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetValueInPartition(ctx, request.(SetValueInPartitionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetValueInPartition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetValueInPartitionResponseObject); ok {
+		if err := validResponse.VisitSetValueInPartitionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

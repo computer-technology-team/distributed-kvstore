@@ -22,12 +22,15 @@
         <h2>{{ .Title }}</h2>
         <div class="partition-detail">
             <h3>Partition ID: {{.Partition.Id}}</h3>
-            <p>Status: {{if .Partition.Active}}Active{{else}}Inactive{{end}}</p>
+            <p>Status: <span class="status-{{.Partition.Status}}">{{.Partition.Status}}</span></p>
+            
+            <h4>Master Node</h4>
+            <p>{{.Partition.MasterNodeId}}</p>
             
             <h4>Nodes</h4>
             <ul>
-                {{range .Partition.Nodes}}
-                <li>{{.Id}} - {{.Address}}</li>
+                {{range .Partition.NodeIds}}
+                <li>{{.}}</li>
                 {{end}}
             </ul>
         </div>

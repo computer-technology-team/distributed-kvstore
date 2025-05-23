@@ -7,6 +7,7 @@ paths:
   /ping:
     get:
       operationId: pingServer
+      x-go-name: PingServer
       summary: Health check endpoint
       responses:
         "200":
@@ -22,10 +23,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
   /kv/{key}:
     get:
       operationId: getValue
+      x-go-name: GetValue
       summary: Get a value by key
       parameters:
         - name: key
@@ -34,6 +36,7 @@ paths:
           schema:
             type: string
           description: Key to retrieve
+          x-go-name: Key
       responses:
         "200":
           description: Value retrieved successfully
@@ -41,23 +44,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KeyValueResponse"
+                $ref: "../common/api.yaml#/components/schemas/KeyValueResponse"
         "404":
           description: Key not found
           x-go-name: NotFound
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
         default:
           description: Unexpected error
           x-go-name: Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
     put:
       operationId: setValue
+      x-go-name: SetValue
       summary: Set a key-value pair
       parameters:
         - name: key
@@ -66,12 +70,13 @@ paths:
           schema:
             type: string
           description: Key to set
+          x-go-name: Key
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetRequest"
+              $ref: "../common/api.yaml#/components/schemas/SetValueRequest"
       responses:
         "200":
           description: Value set successfully
@@ -79,23 +84,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KeyValueResponse"
+                $ref: "../common/api.yaml#/components/schemas/KeyValuePair"
         "400":
           description: Invalid request
           x-go-name: BadRequest
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
         default:
           description: Unexpected error
           x-go-name: Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteKey
+      x-go-name: DeleteKey
       summary: Delete a key-value pair
       parameters:
         - name: key
@@ -104,6 +110,7 @@ paths:
           schema:
             type: string
           description: Key to delete
+          x-go-name: Key
       responses:
         "200":
           description: Key deleted successfully
@@ -111,21 +118,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/KeyResponse"
+                $ref: "../common/api.yaml#/components/schemas/DeleteResponse"
         "404":
           description: Key not found
           x-go-name: NotFound
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
         default:
           description: Unexpected error
           x-go-name: Error
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "../common/api.yaml#/components/schemas/ErrorResponse"
 components:
   schemas:
     Pong:
@@ -136,39 +143,4 @@ components:
         ping:
           type: string
           example: pong
-    SetRequest:
-      type: object
-      required:
-        - value
-      properties:
-        value:
-          type: string
-          description: The value associated with the key
-    KeyValueResponse:
-      type: object
-      required:
-        - value
-        - key
-      properties:
-        value:
-          type: string
-          description: The value associated with the key
-        key:
-          type: string
-          description: The key
-    KeyResponse:
-      type: object
-      required:
-        - key
-      properties:
-        key:
-          type: string
-          description: The key that was operated on
-    ErrorResponse:
-      type: object
-      required:
-        - error
-      properties:
-        error:
-          type: string
-          description: Error message
+          x-go-name: Ping

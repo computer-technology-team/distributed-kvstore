@@ -2,11 +2,14 @@ package node
 
 import (
 	"context"
+	"fmt"
 
-	kvstoreAPI "github.com/computer-technology-team/distributed-kvstore/api/kvstore"
+	"github.com/computer-technology-team/distributed-kvstore/api/database"
 	internalKVStore "github.com/computer-technology-team/distributed-kvstore/internal/kvstore"
 	"github.com/google/uuid"
+	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime/types"
+	"log/slog"
 )
 
 type server struct {
@@ -14,86 +17,99 @@ type server struct {
 	id      uuid.UUID
 }
 
-func NewServer(id types.UUID) kvstoreAPI.StrictServerInterface {
-	// Convert the types.UUID to a uuid.UUID
-	nodeID := uuid.UUID{}
-	copy(nodeID[:], id[:])
+func NewServer(id types.UUID) database.StrictServerInterface {
 	return &server{
-		kvStore: internalKVStore.NewKVStore(),
-		id:      nodeID,
+		kvStore: internalKVStore.NewNodeStore(),
+		id:      id,
 	}
 }
 
-func (s *server) PingServer(ctx context.Context, request kvstoreAPI.PingServerRequestObject) (kvstoreAPI.PingServerResponseObject, error) {
-	return kvstoreAPI.PingServer200JSONResponse{
-		Ping: "pong",
+// Database API implementation
+func (s *server) GetClusterState(ctx context.Context, request database.GetClusterStateRequestObject) (database.GetClusterStateResponseObject, error) {
+
+	return database.GetClusterState200JSONResponse{
+		Partitions: s.kvStore.GetPartitionRoles(),
+		NodeID:     s.id,
 	}, nil
 }
 
-func (s *server) GetValue(ctx context.Context, request kvstoreAPI.GetValueRequestObject) (kvstoreAPI.GetValueResponseObject, error) {
-	key := request.Key
-	
-	// Find a replica that has this key
-	partitions := s.kvStore.GetAllPartitions()
-	for partitionID := range partitions {
-		// Get the value directly from the partition
-		if value, exists, err := s.kvStore.Get(partitionID, key); err == nil && exists {
-			return kvstoreAPI.GetValue200JSONResponse{
-				Value: value,
-				Key:   key,
-			}, nil
-		}
+// UpdateNodeState implements database.StrictServerInterface.
+func (s *server) UpdateNodeState(ctx context.Context, request database.UpdateNodeStateRequestObject) (database.UpdateNodeStateResponseObject, error) {
+	if request.NodeID != s.id {
+		slog.Error("node ids don't match")
+		return database.UpdateNodeState500JSONResponse{Error: "node id does not match"}, nil
 	}
 
-	return kvstoreAPI.GetValue404JSONResponse{
-		Error: "Key not found",
+	err := s.kvStore.SetState(*request.Body)
+	if err != nil {
+		slog.Error("failed to set state", "error", err)
+		return database.UpdateNodeState500JSONResponse{Error: fmt.Sprintf("failed to set state: %v", err)}, nil
+	}
+
+	return database.UpdateNodeState200Response{}, nil
+}
+
+// KVStore API with partition ID implementation
+func (s *server) GetValueFromPartition(ctx context.Context, request database.GetValueFromPartitionRequestObject) (database.GetValueFromPartitionResponseObject, error) {
+	partitionID := request.PartitionID
+	key := request.Key
+
+	// Get the value directly from the specified partition
+	if value, exists, err := s.kvStore.Get(partitionID, key); err == nil && exists {
+		return database.GetValueFromPartition200JSONResponse{
+			Value: nullable.NewNullableWithValue(value),
+			Key:   key,
+		}, nil
+	}
+
+	return database.GetValueFromPartition404JSONResponse{
+		Error: "Key not found in partition",
 	}, nil
 }
 
-func (s *server) SetValue(ctx context.Context, request kvstoreAPI.SetValueRequestObject) (kvstoreAPI.SetValueResponseObject, error) {
+func (s *server) SetValueInPartition(ctx context.Context, request database.SetValueInPartitionRequestObject) (database.SetValueInPartitionResponseObject, error) {
+	partitionID := request.PartitionID
 	key := request.Key
+
+	if request.Body == nil {
+		return database.SetValueInPartition400JSONResponse{
+			Error: "Missing request body",
+		}, nil
+	}
+
 	value := request.Body.Value
 
-	// Find a master replica to write to
-	partitions := s.kvStore.GetAllPartitions()
-	for partitionID, isMaster := range partitions {
-		if !isMaster {
-			continue // Skip non-master partitions
-		}
-		
-		// Set the value directly in the partition
-		if err := s.kvStore.Set(partitionID, key, value); err == nil {
-			return kvstoreAPI.SetValue200JSONResponse{
-				Key:   key,
-				Value: value,
-			}, nil
-		}
+	// Set the value directly in the specified partition
+	if err := s.kvStore.Set(partitionID, key, value); err != nil {
+		return database.SetValueInPartition400JSONResponse{
+			Error: err.Error(),
+		}, nil
 	}
 
-	return kvstoreAPI.SetValue400JSONResponse{
-		Error: "No master replica available for write operation",
+	return database.SetValueInPartition200JSONResponse{
+		Key:   key,
+		Value: value,
 	}, nil
 }
 
-func (s *server) DeleteKey(ctx context.Context, request kvstoreAPI.DeleteKeyRequestObject) (kvstoreAPI.DeleteKeyResponseObject, error) {
+func (s *server) DeleteKeyFromPartition(ctx context.Context, request database.DeleteKeyFromPartitionRequestObject) (database.DeleteKeyFromPartitionResponseObject, error) {
+	partitionID := request.PartitionID
 	key := request.Key
-	
-	// Find a master replica to delete from
-	partitions := s.kvStore.GetAllPartitions()
-	for partitionID, isMaster := range partitions {
-		if !isMaster {
-			continue // Skip non-master partitions
-		}
-		
-		// Delete the key directly from the partition
-		if deleted, err := s.kvStore.Delete(partitionID, key); err == nil && deleted {
-			return kvstoreAPI.DeleteKey200JSONResponse{
-				Key: key,
-			}, nil
-		}
+
+	deleted, err := s.kvStore.Delete(partitionID, key)
+	if err != nil {
+		return database.DeleteKeyFromPartition500JSONResponse{
+			Error: err.Error(),
+		}, nil
 	}
 
-	return kvstoreAPI.DeleteKey404JSONResponse{
-		Error: "Key not found or no master replica available",
+	if !deleted {
+		return database.DeleteKeyFromPartition404JSONResponse{
+			Error: "Key not found in partition",
+		}, nil
+	}
+
+	return database.DeleteKeyFromPartition200JSONResponse{
+		Key: key,
 	}, nil
 }
