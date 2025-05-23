@@ -16,6 +16,7 @@ type KVStore struct {
 	nextOpID  int64
 }
 
+
 // newKVStoreInstance creates a new KVStore instance
 func newKVStoreInstance() *KVStore {
 	return &KVStore{

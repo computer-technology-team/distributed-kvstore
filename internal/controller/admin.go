@@ -2,13 +2,12 @@ package controller
 
 import (
 	"io/fs"
+	"log/slog"
 	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/computer-technology-team/distributed-kvstore/web"
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
 type adminServer struct {
@@ -35,8 +34,8 @@ type AdminServer interface {
 	// PartitionDetail renders details for a specific partition
 	PartitionDetail(w http.ResponseWriter, r *http.Request)
 
-	// AddPartition handles the creation of a new partition
-	AddPartition(w http.ResponseWriter, r *http.Request)
+	// SetPartitionSize handles setting the number of partitions
+	SetPartitionSize(w http.ResponseWriter, r *http.Request)
 
 	// RemovePartition handles the removal of a partition
 	RemovePartition(w http.ResponseWriter, r *http.Request)
@@ -101,7 +100,7 @@ func (a *adminServer) SetupRoutes() {
 		r.Route("/partitions", func(r chi.Router) {
 			r.Get("/", a.PartitionsList)
 			r.Get("/{id}", a.PartitionDetail)
-			r.Post("/add", a.AddPartition)
+			r.Post("/set-size", a.SetPartitionSize)
 			r.Post("/remove", a.RemovePartition)
 		})
 
@@ -164,36 +163,6 @@ func (a *adminServer) PartitionDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.renderTemplate(w, "partition_detail.html", data)
-}
-
-// AddPartition handles the creation of a new partition
-func (a *adminServer) AddPartition(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	err := r.ParseForm()
-	if err != nil {
-		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
-		return
-	}
-
-	partitionID := r.FormValue("partition_id")
-	if partitionID == "" {
-		http.Error(w, "Partition ID is required", http.StatusBadRequest)
-		return
-	}
-
-	// Add the partition to the controller
-	err = a.controller.AddPartition(partitionID)
-	if err != nil {
-		http.Error(w, "Failed to add partition: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Redirect back to the partitions list
-	http.Redirect(w, r, "/partitions", http.StatusSeeOther)
 }
 
 // RemovePartition handles the removal of a partition
@@ -261,29 +230,7 @@ func (a *adminServer) AddNode(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to register node: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-	} else {
-		// Legacy path for manually adding a node (should not be used anymore)
-		nodeID := uuid.New()
-		nodeAddress := r.FormValue("node_address")
-
-		if nodeAddress == "" {
-			http.Error(w, "address is required", http.StatusBadRequest)
-			return
-		}
-
-		_, err = url.Parse("http://" + nodeAddress)
-		if err != nil {
-			http.Error(w, "could not parse address", http.StatusBadRequest)
-		}
-
-		// Add the node to the controller
-		err = a.controller.AddNode(nodeID, nodeAddress)
-		if err != nil {
-			http.Error(w, "Failed to add node: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
-
 	// Redirect back to the nodes list
 	http.Redirect(w, r, "/nodes", http.StatusSeeOther)
 }
@@ -334,9 +281,45 @@ func (a *adminServer) SystemStats(w http.ResponseWriter, r *http.Request) {
 	a.renderTemplate(w, "stats.html", data)
 }
 
+// SetPartitionSize handles setting the number of partitions
+func (a *adminServer) SetPartitionSize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
+		return
+	}
+
+	partitionCount := r.FormValue("partition_count")
+	if partitionCount == "" {
+		http.Error(w, "Partition count is required", http.StatusBadRequest)
+		return
+	}
+
+	partitionCountInt, err := strconv.Atoi(partitionCount)
+	if err != nil || partitionCountInt < 1 {
+		http.Error(w, "Invalid partition count number", http.StatusBadRequest)
+		return
+	}
+
+	err = a.controller.SetPartitionCount(partitionCountInt)
+	if err != nil {
+		slog.Error("could not set partition", "count", partitionCountInt,
+			"error", err)
+		http.Error(w, "could not set partition", http.StatusInternalServerError)
+		return
+	}
+
+	// Redirect back to the partitions list
+	http.Redirect(w, r, "/partitions", http.StatusSeeOther)
+}
+
 // SetReplicaCount implements AdminServer.
 func (a *adminServer) SetReplicaCount(w http.ResponseWriter, r *http.Request) {
-
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -357,11 +340,13 @@ func (a *adminServer) SetReplicaCount(w http.ResponseWriter, r *http.Request) {
 	replicaCountInt, err := strconv.Atoi(replicaCount)
 	if err != nil || replicaCountInt < 0 {
 		http.Error(w, "Invalid Replica Count Number", http.StatusBadRequest)
+		return
 	}
 
 	err = a.controller.SetReplicaCount(replicaCountInt)
 	if err != nil {
 		http.Error(w, "could not set replica count", http.StatusBadRequest)
+		return
 	}
 
 	http.Redirect(w, r, "/", http.StatusMovedPermanently)
