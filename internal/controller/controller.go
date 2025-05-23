@@ -175,7 +175,7 @@ func (c *Controller) getAllNodesForPartition() ([]openapi_types.UUID, []common.N
 	for i, node := range c.state.Nodes {
 		nodeIDs[i] = node.Id
 	}
-	return nodeIDs, c.state.Nodes
+	return nodeIDs[:c.state.ReplicaCount+1], c.state.Nodes[:c.state.ReplicaCount+1]
 }
 
 // selectNodesForPartition selects nodes for a new partition based on load balancing
@@ -185,7 +185,7 @@ func (c *Controller) selectNodesForPartition() ([]openapi_types.UUID, []common.N
 	maxNodePartitions := int(math.Round(float64(currentPartitionCount+1) / float64(currentNodeCount)))
 
 	candidateNodes := lo.Filter(c.state.Nodes, func(n common.Node, _ int) bool {
-		return len(n.Partitions) < maxNodePartitions
+		return len(n.Partitions) <= maxNodePartitions
 	})
 
 	partitionNodes := lo.Samples(candidateNodes, c.state.ReplicaCount+1)
@@ -246,10 +246,6 @@ func (c *Controller) AddNode(nodeID uuid.UUID, nodeAddress string) error {
 	}
 
 	return errors.New("unimplemented")
-}
-
-func (c *Controller) RemovePartition(partitionID string) error {
-	panic("unimplemented")
 }
 
 func (c *Controller) GetState() common.State {

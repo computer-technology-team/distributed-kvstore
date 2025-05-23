@@ -37,9 +37,6 @@ type AdminServer interface {
 	// SetPartitionSize handles setting the number of partitions
 	SetPartitionSize(w http.ResponseWriter, r *http.Request)
 
-	// RemovePartition handles the removal of a partition
-	RemovePartition(w http.ResponseWriter, r *http.Request)
-
 	// NodesList renders the nodes management page
 	NodesList(w http.ResponseWriter, r *http.Request)
 
@@ -101,7 +98,6 @@ func (a *adminServer) SetupRoutes() {
 			r.Get("/", a.PartitionsList)
 			r.Get("/{id}", a.PartitionDetail)
 			r.Post("/set-size", a.SetPartitionSize)
-			r.Post("/remove", a.RemovePartition)
 		})
 
 		// Nodes management
@@ -163,36 +159,6 @@ func (a *adminServer) PartitionDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.renderTemplate(w, "partition_detail.html", data)
-}
-
-// RemovePartition handles the removal of a partition
-func (a *adminServer) RemovePartition(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	err := r.ParseForm()
-	if err != nil {
-		http.Error(w, "Failed to parse form data", http.StatusBadRequest)
-		return
-	}
-
-	partitionID := r.FormValue("partition_id")
-	if partitionID == "" {
-		http.Error(w, "Partition ID is required", http.StatusBadRequest)
-		return
-	}
-
-	// Remove the partition from the controller
-	err = a.controller.RemovePartition(partitionID)
-	if err != nil {
-		http.Error(w, "Failed to remove partition: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Redirect back to the partitions list
-	http.Redirect(w, r, "/partitions", http.StatusSeeOther)
 }
 
 // NodesList renders the nodes management page
