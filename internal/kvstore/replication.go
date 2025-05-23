@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/computer-technology-team/distributed-kvstore/api/common"
+	"github.com/computer-technology-team/distributed-kvstore/api/controller"
 )
 
 func (ns *NodeStore) sendOperationToReplicas(partitionID string, op common.Operation) {
@@ -70,7 +71,7 @@ func (ns *NodeStore) ApplyOperation(partitionID string, op common.Operation) err
 
 	// Check for missing operations (gap > 1)
 	if op.ID > store.nextOpID && (op.ID-store.nextOpID) > 1 {
-		store.isSyncing = true
+		ns.setSyncingStatus(partitionID, true)
 		// Request missing operations from master asynchronously
 		go ns.syncReplicaPartitionWithMaster(partitionID)
 		return fmt.Errorf("partition %s is syncing: missing operations", partitionID)
@@ -156,6 +157,46 @@ func (ns *NodeStore) syncReplicaPartitionWithMaster(partitionID string) {
 	}
 
 	// Mark syncing as complete
-	store.isSyncing = false
+	ns.setSyncingStatus(partitionID, false)
 	fmt.Printf("successfully synced partition %s with master\n", partitionID)
+}
+
+// setSyncingStatus updates the syncing status both locally and in the cluster state
+func (ns *NodeStore) setSyncingStatus(partitionID string, isSyncing bool) {
+	ns.mu.Lock()
+	defer ns.mu.Unlock()
+
+	// Update local store
+	if store, exists := ns.stores[partitionID]; exists {
+		store.mu.Lock()
+		store.isSyncing = isSyncing
+		store.mu.Unlock()
+	}
+
+	// Update cluster state by finding and modifying the node directly
+	var updatedNode *common.Node
+	for i := range ns.state.Nodes {
+		if ns.state.Nodes[i].Id == ns.id {
+			if role, exists := ns.state.Nodes[i].Partitions[partitionID]; exists {
+				role.IsSyncing = isSyncing
+				ns.state.Nodes[i].Partitions[partitionID] = role
+				updatedNode = &ns.state.Nodes[i]
+			}
+			break
+		}
+	}
+
+	// Notify controller of the state change using generated API
+	if updatedNode != nil {
+		go func() {
+			client, err := controller.NewClient(ns.controllerAddress)
+			if err != nil {
+				fmt.Printf("failed to create controller client: %v\n", err)
+				return
+			}
+			if err := client.UpdateNodeState(ns.id, updatedNode); err != nil {
+				fmt.Printf("failed to update controller state: %v\n", err)
+			}
+		}()
+	}
 }

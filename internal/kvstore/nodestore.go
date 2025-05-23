@@ -15,18 +15,20 @@ import (
 
 // NodeStore manages multiple KVStores for different partitions
 type NodeStore struct {
-	mu          sync.RWMutex
-	stores      map[string]*KVStore       // Map of partitionID to KVStore
-	lastUpdated atomic.Pointer[time.Time] // Last updated timestamp
-	state       common.State
-	id          uuid.UUID
+	mu                sync.RWMutex
+	stores            map[string]*KVStore       // Map of partitionID to KVStore
+	lastUpdated       atomic.Pointer[time.Time] // Last updated timestamp
+	state             common.State
+	id                uuid.UUID
+	controllerAddress string
 }
 
 // NewNodeStore creates a new NodeStore instance
-func NewNodeStore(id uuid.UUID) *NodeStore {
+func NewNodeStore(id uuid.UUID, controllerAddress string) *NodeStore {
 	t := time.Now()
 	ns := &NodeStore{
-		stores: make(map[string]*KVStore),
+		stores:            make(map[string]*KVStore),
+		controllerAddress: controllerAddress,
 	}
 
 	ns.lastUpdated.Store(&t)

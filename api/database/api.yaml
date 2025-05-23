@@ -32,6 +32,8 @@ paths:
       description: Updates the state of a specific node and its partitions
       operationId: updateNodeState
       x-go-name: UpdateNodeState
+      tags:
+        - Node Management
       parameters:
         - name: nodeId
           in: path
@@ -46,7 +48,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/NodeState"
+              $ref: "../common/api.yaml#/components/schemas/NodeState"
       responses:
         "200":
           description: Node state updated successfully

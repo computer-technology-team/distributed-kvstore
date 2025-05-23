@@ -24,7 +24,7 @@ import (
 type NodeState = externalRef0.State
 
 // UpdateNodeStateJSONRequestBody defines body for UpdateNodeState for application/json ContentType.
-type UpdateNodeStateJSONRequestBody = NodeState
+type UpdateNodeStateJSONRequestBody = externalRef0.NodeState
 
 // ApplyOperationJSONRequestBody defines body for ApplyOperation for application/json ContentType.
 type ApplyOperationJSONRequestBody = externalRef0.Operation
