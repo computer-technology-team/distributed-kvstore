@@ -76,6 +76,7 @@ type ControllerConfig struct {
 	LoadBalancerURL     string        `mapstructure:"load_balancer_url"`
 	HealthCheckDuration time.Duration `mapstructure:"health_check_duration"`
 	HealthCheckTimeout  time.Duration `mapstructure:"health_check_timeout"`
+	VirtualNodeCount    int           `mapstructure:"virtual_node_count"`
 }
 
 type LogLevel struct {
@@ -105,6 +106,7 @@ var ConfigFlags = []FlagConfig{
 	{"controller.load_balancer_url", "controller.load_balancer_url", "http://localhost:8001", "Load Balancer URL"},
 	{"controller.health_check_duration", "controller.health_check_duration", time.Second * 5, "Health Check Duration"},
 	{"controller.health_check_timeout", "controller.health_check_timeout", time.Second * 2, "Health Check Timeout"},
+	{"controller.virtual_node_count", "controller.virtual_node_count", 3, "Number of Virtual nodes for each partition"},
 	{"load-balancer.public-server.host", "load_balancer.public_server.host", "localhost", "Load balancer public server host"},
 	{"load-balancer.public-server.port", "load_balancer.public_server.port", 8000, "Load balancer public server port"},
 	{"load-balancer.private-server.host", "load_balancer.private_server.host", "localhost", "Load balancer private server host"},

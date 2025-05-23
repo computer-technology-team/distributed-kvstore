@@ -38,8 +38,8 @@ func NewControllerCmd() *cobra.Command {
 				return fmt.Errorf("failed to create balancer client: %w", err)
 			}
 
-			ctrl := controller.NewController(cfg.Controller.HealthCheckDuration, cfg.Controller.HealthCheckTimeout,
-				balancerClient)
+			ctrl := controller.NewController(cfg.Controller.VirtualNodeCount, cfg.Controller.HealthCheckDuration,
+				cfg.Controller.HealthCheckTimeout, balancerClient)
 
 			controllerAddr := fmt.Sprintf("%s:%d", cfg.Controller.Host, cfg.Controller.Port)
 			controllerListener, err := net.Listen("tcp", controllerAddr)

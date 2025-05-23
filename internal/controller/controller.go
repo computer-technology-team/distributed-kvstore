@@ -30,6 +30,7 @@ type Controller struct {
 	ticker              *time.Ticker
 	stopWorker          chan int
 	nodeClients         map[uuid.UUID]database.ClientWithResponsesInterface
+	virtualNodeCount    int
 }
 
 func (c *Controller) AddPartition(partitionID string) error {
@@ -73,7 +74,7 @@ func (c *Controller) AddPartition(partitionID string) error {
 			Status:       common.Healthy,
 		}
 
-		err := c.generateVirtualNodesForPartition(partitionID, 3*len(c.state.Nodes))
+		err := c.generateVirtualNodesForPartition(partitionID, c.virtualNodeCount)
 		if err != nil {
 			slog.Error("failed to generate virtual nodes for partition", "error", err)
 			return err
@@ -339,7 +340,7 @@ func (c *Controller) SetReplicaCount(replicaNum int) error {
 	return nil
 }
 
-func NewController(healthCheckInterval time.Duration, healthCheckTimeout time.Duration, balancerClient loadbalancer.ClientWithResponsesInterface) *Controller {
+func NewController(virtualNodeCount int, healthCheckInterval time.Duration, healthCheckTimeout time.Duration, balancerClient loadbalancer.ClientWithResponsesInterface) *Controller {
 	return &Controller{
 		balancerClient:      balancerClient,
 		startTime:           time.Now(),
@@ -347,5 +348,6 @@ func NewController(healthCheckInterval time.Duration, healthCheckTimeout time.Du
 		healthCheckTimeout:  healthCheckTimeout,
 		stopWorker:          make(chan int),
 		nodeClients:         make(map[uuid.UUID]database.ClientWithResponsesInterface),
+		virtualNodeCount:    virtualNodeCount,
 	}
 }
