@@ -18,9 +18,9 @@ type server struct {
 	id        uuid.UUID
 }
 
-func NewServer(id types.UUID) database.StrictServerInterface {
+func NewServer(id types.UUID, controllerAddr string) database.StrictServerInterface {
 	return &server{
-		nodeStore: internalKVStore.NewNodeStore(id),
+		nodeStore: internalKVStore.NewNodeStore(id, controllerAddr),
 		id:        id,
 	}
 }
@@ -43,7 +43,9 @@ func (s *server) UpdateNodeState(ctx context.Context, request database.UpdateNod
 		return database.UpdateNodeState400JSONResponse{Error: "request body is nil"}, nil
 	}
 
-	err := s.nodeStore.SetState(*request.Body)
+	// Since NodeState is an alias for common.State, we can use it directly
+	state := *request.Body
+	err := s.nodeStore.SetState(state)
 	if err != nil {
 		slog.Error("failed to set state", "error", err)
 		return database.UpdateNodeState500JSONResponse{Error: fmt.Sprintf("failed to set state: %v", err)}, nil

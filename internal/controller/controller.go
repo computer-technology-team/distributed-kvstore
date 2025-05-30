@@ -337,10 +337,9 @@ func (c *Controller) updateNodePartitionsStatus(node *common.Node, status common
 func (c *Controller) checkNode(node *common.Node) {
 	client, err := database.NewClientWithResponses("http://" + node.Address)
 	if err != nil {
-		// Update status for all partitions this node is responsible for
-		c.updateNodePartitionsStatus(node, common.Unhealthy)
-		slog.Error("could not initalize database client", "error", err,
+		slog.Error("could not initialize database client", "error", err,
 			"node_address", node.Address)
+		c.handleNodeFailure(node)
 		return
 	}
 
@@ -349,22 +348,134 @@ func (c *Controller) checkNode(node *common.Node) {
 
 	resp, err := client.GetClusterStateWithResponse(ctx)
 	if err != nil {
-		// Update status for all partitions this node is responsible for
-		c.updateNodePartitionsStatus(node, common.Unhealthy)
 		slog.Error("could not get state", "node_address", node.Address, "error", err)
+		c.handleNodeFailure(node)
 		return
 	}
 
 	if resp.StatusCode() != 200 {
-		// Update status for all partitions this node is responsible for
-		c.updateNodePartitionsStatus(node, common.Unhealthy)
-		slog.Error("state response non 200",
-			"node_address", node.Address, "status_code", resp.StatusCode())
+		slog.Error("state response non 200", "node_address", node.Address, "status_code", resp.StatusCode())
+		c.handleNodeFailure(node)
 		return
 	}
 
-	// Update status for all partitions this node is responsible for
+	// Check for split-brain situations
+	for partitionID, role := range node.Partitions {
+		if !role.IsMaster {
+			continue
+		}
+
+		partition := c.state.Partitions[partitionID]
+		for _, otherNodeID := range partition.NodeIds {
+			if otherNodeID == node.Id {
+				continue
+			}
+
+			// Find the other node
+			otherNode := lo.Find(c.state.Nodes, func(n common.Node) bool {
+				return n.Id == otherNodeID
+			})
+
+			if otherNode.Partitions == nil {
+				continue
+			}
+
+			otherRole, exists := otherNode.Partitions[partitionID]
+			if !exists || !otherRole.IsMaster {
+				continue
+			}
+
+			// We found another master for this partition
+			// Get nextOpId from both nodes' states
+			currentNextOpID := resp.JSON200.Partitions[partitionID].NextOpId
+			otherNextOpID := resp.JSON200.Partitions[partitionID].NextOpId
+
+			// Compare nextOpIds and elect the appropriate master
+			if otherNextOpID > currentNextOpID {
+				// Other node has higher nextOpId, make it the master
+				node.Partitions[partitionID] = common.PartitionRole{IsMaster: false}
+				partition.MasterNodeId = otherNode.Id
+				c.state.Partitions[partitionID] = partition
+				slog.Info("resolved split-brain situation",
+					"partition", partitionID,
+					"new_master", otherNode.Address,
+					"new_master_nextOpId", otherNextOpID,
+					"old_master_nextOpId", currentNextOpID)
+			} else {
+				// Current node has higher or equal nextOpId, keep it as master
+				otherNode.Partitions[partitionID] = common.PartitionRole{IsMaster: false}
+				slog.Info("resolved split-brain situation",
+					"partition", partitionID,
+					"kept_master", node.Address,
+					"kept_master_nextOpId", currentNextOpID,
+					"demoted_master_nextOpId", otherNextOpID)
+			}
+
+			// Dispatch updated state
+			go c.dispatchState()
+		}
+	}
+
+	// Node is healthy
 	c.updateNodePartitionsStatus(node, common.Healthy)
+}
+
+func (c *Controller) handleNodeFailure(failedNode *common.Node) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	// Mark node as unhealthy
+	c.updateNodePartitionsStatus(failedNode, common.Unhealthy)
+
+	// Check each partition where this node was the master
+	for partitionID, role := range failedNode.Partitions {
+		if !role.IsMaster {
+			continue
+		}
+
+		partition := c.state.Partitions[partitionID]
+
+		// Find a healthy replica to promote
+		var newMaster *common.Node
+		for _, nodeID := range partition.NodeIds {
+			for i := range c.state.Nodes {
+				node := &c.state.Nodes[i]
+				if node.Id == nodeID && node.Id != failedNode.Id {
+					// Check if this replica is healthy
+					if role, exists := node.Partitions[partitionID]; exists && !role.IsSyncing {
+						newMaster = node
+						break
+					}
+				}
+			}
+			if newMaster != nil {
+				break
+			}
+		}
+
+		if newMaster == nil {
+			slog.Error("no healthy replica found for partition", "partition_id", partitionID)
+			continue
+		}
+
+		// Update partition master
+		partition.MasterNodeId = newMaster.Id
+		c.state.Partitions[partitionID] = partition
+
+		// Update roles
+		if newMaster.Partitions == nil {
+			newMaster.Partitions = make(map[string]common.PartitionRole)
+		}
+		newMaster.Partitions[partitionID] = common.PartitionRole{IsMaster: true}
+
+		slog.Info("new master assigned for partition",
+			"partition_id", partitionID,
+			"new_master_id", newMaster.Id,
+			"new_master_address", newMaster.Address)
+
+		// Dispatch updated state to load balancer and nodes
+		go c.dispatchState()
+	}
 }
 
 func (c *Controller) StopWatcher() {
